@@ -22,13 +22,13 @@ Original Fossil SCM can be compiled with typical `configure; make;` steps. Inter
 
 ### Build with default cc ###
 
-Created `Makefile` include two variables: `BCC` and `TCC`. They are set to use `cc`. Run `make` to make sure fossil can be compiled with necessary libraries in the platform.
+Created `Makefile` includes two variables: `BCC` and `TCC`. They are set to use `cc`. Run `make` to make sure fossil can be compiled with necessary libraries in the platform.
 
-The compiled binary will be located in the same directory of Makefile, under `build` directory created above.
+The compiled binary will be located in the same directory of Makefile, under `build` directory created above. All artifacts (.h, .o, etc.) will located under `build/bld` subdirectory by default.
 
 ### Build with zig cc ###
 
-`Zig cc` is a [drop-in replacement for GCC/Clang](https://andrewkelley.me/post/zig-cc-powerful-drop-in-replacement-gcc-clang.html). Therefore, let's replace cc with `zig cc` in Makefile and see. Go find `BCC` and `TCC` in Makefile and replace `cc` with `zig cc`. Then do `make` to compile. In my platform, there are errors aboud dns:
+`Zig cc` is a [drop-in replacement for GCC/Clang](https://andrewkelley.me/post/zig-cc-powerful-drop-in-replacement-gcc-clang.html). Therefore, let's replace `cc` with `zig cc` in Makefile and see. Go find `BCC` and `TCC` in Makefile and replace `cc` with `zig cc`. Then do `make` to compile. In my platform, there are errors aboud dns:
 
 ```
 LLD Link... ld.lld: error: undefined symbol: __res_query
@@ -49,14 +49,116 @@ ld.lld: error: undefined symbol: __dn_expand
 make: *** [../src/main.mk:743: fossil] Error 1
 ```
 
-It seems to be an issue of resolv library version. Since it is only used in smtp of Fossil for email alert, it can be disable by adding `#define FOSSIL_OMIT_DNS 1` in `autoconfig.h`
+It seems to be an issue of resolv library version. Since it is only used in smtp of Fossil for email alert, it can be disabled by adding `#define FOSSIL_OMIT_DNS 1` in `autoconfig.h`
 
 To rebuild, after replacing `cc` with `zig cc` in Makefile, run `make clean; make;`
 
 A new version of `fossil` is created and run `fossil version` to see it work.
 
+### build.zig ###
+
+`build.zig` is at heart of zig build system. It declares the building process similar to Makefile. One thing to note is that it declares the relationship of building process, but does not actually build it. Therefore, the output declared in build.zig cannot be used in `build.zig`. Any output from `build.zig` can be accessed after `zig build` is finished. The second thing to notice is `zig build` is a shortcut to `zig build install`. And `install` in zig means installation to `./zig-out` subdirectory, not the system directory. `make install` usually installs into system directory. So it is fairly common to see the use of `zig build install` (or `zig build`) in development stage. It does not mean to install into `/usr/local/bin` or so, but just to `./zig-out/bin`. This may become important when we need to know where compiled or processed files are.
+
+Details about the Zig build system will not be explained here, just to show a working version. Some good articles can be found by searching online. Zig is still under active development and API is changing. Document a few years old may not apply now. I will try to keep this one updated. Now, it targets Zig `0.11.0`.
+
+### Build tools ###
+
+There are tools under `tools` directory to be built first in order to process source code, namely `translate`, `mkindex`, `mkbuiltin`, `makeheaders`, `mkversion`, `codecheck1`. Let's build `tralsnate` first. Create a `build.zig` like this:
+
+```
+const std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const translate_exe = b.addExecutable(.{
+        .name = "translate",
+        .root_source_file = null, // null because it is not zig source code
+        .target = target,
+        .optimize = optimize,
+    });
+
+    translate_exe.addCSourceFile(.{
+        .file = .{
+            .path = "../tools/translate.c", // relative path to C source code
+        },
+        .flags = &[_][]const u8 {}
+    });
+    translate_exe.linkLibC();
+
+    // This declares intent for the executable to be installed into the
+    // standard location when the user invokes the "install" step (the default
+    // step when running `zig build`).
+    // Equal to b.installArtifact(translate_exe);
+    const install_translate = b.addInstallArtifact(translate_exe, .{});
+    b.getInstallStep().dependOn(&install_translate.step);
+}
+```
+
+Run `zig build` will create `zig-out/bin/translate` tool. If it is preferred to out `translate` tool under `build/bld` as what Makefile does, installation path can be assigned (not sure the right way):
+
+```
+const std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    b.install_path = "./bld"; // default to ./bld directory
+
+    const translate_exe = b.addExecutable(.{
+        .name = "translate",
+        .root_source_file = null, // null because it is not zig source code
+        .target = target,
+        .optimize = optimize,
+    });
+
+    translate_exe.addCSourceFile(.{
+        .file = .{
+            .path = "../tools/translate.c", // relative path to C source code
+        },
+        .flags = &[_][]const u8 {}
+    });
+    translate_exe.linkLibC();
+
+    // This declares intent for the executable to be installed into the
+    // standard location when the user invokes the "install" step (the default
+    // step when running `zig build`).
+    // Assign to install_path
+    const install_translate = b.addInstallArtifact(translate_exe, .{.dest_dir = .{.override = .{.custom = "./"}}});
+    b.getInstallStep().dependOn(&install_translate.step);
+}
+```
+
+Note that `translate_exe` is added into _install_step_, therefore, it will be executed (compiled) with `zig build install`. Other step can be created, say `zig build tools` to build tools only like this:
+
+```
+    // This declares intent for the executable to be installed into the
+    // standard location when the user invokes the "install" step (the default
+    // step when running `zig build`).
+    // Equal to b.installArtifact(translate_exe);
+    const install_translate = b.addInstallArtifact(translate_exe, .{.dest_dir = .{.override = .{.custom = "./"}}});
+    b.getInstallStep().dependOn(&install_translate.step);
+
+    const tools_step = b.step("tools", "build tools");
+    tools_step.dependOn(&install_translate.step);
+```
+
+So besides adding `install_translate.step` into default install step (`b.getInstallStep()`), a `tools` step is created and `install_translate` is added. Run `zig build --help` can see the `tools` steps listed like this:
+
+```
+Usage: zig build [steps] [options]
+
+Steps:
+  install (default)            Copy build artifacts to prefix path
+  uninstall                    Remove build artifacts from prefix path
+  tools                        build tools
+```
+
+And run `zig build tools` will also create `translate` tool under `build/bld`.
+
 ## Change log ##
 
-2023-11-06 replace `cc` with `zig cc` 
 2023-11-06 import Fossil 2.22
 2023-11-06 repository created

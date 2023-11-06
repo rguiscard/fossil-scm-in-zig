@@ -1,2 +1,4 @@
 build/bld/
 build/fossil
+build/zig-cache
+build/zig-out

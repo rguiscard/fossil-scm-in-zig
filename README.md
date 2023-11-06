@@ -1,12 +1,30 @@
-## Fossil SCM in Zig ##
+# Fossil SCM with Zig build system #
 
-**This is not the official [Fossil SCM](https://fossil-scm.org/).** There is no practical use of this repository. It is mainly a learning experience of compiling a C project with [Zig](https://ziglang.org/) build system.
+**This is NOT the official [Fossil SCM](https://fossil-scm.org/).** There is no practical use of this repository. It is mainly a learning experience of compiling a C project with [Zig](https://ziglang.org/) build system.
 
-### Original README.me ###
+### Original Fossil README.md ###
 
 Please see [README.fossil.md](README.fossil.md)
 
 ## Overview ##
+
+Original Fossil SCM can be compiled with typilcal `configure; make;` steps. Internally, it create configure files, creates several tools, preprocesses source codes, then do the final compilation, resulting a single `fossil` binary. It is a multi-step process. The goal of this repository is to recreate the same compilation process with Zig build system, namely `build.zig`. If possible, a single `zig build` can create `fossil` binary. Otherwise, it may take several steps to build the final binary.
+
+## Build ##
+
+### Create build directory ###
+
+`mkdir build; cd build;`
+
+### Configuration ###
+
+`../configure --json --with-th1-docs --with-sqlite=tree`
+
+### Build with default cc ###
+
+Created `Makefile` include two variables: `BCC` and `TCC`. They are set to use `cc`. Run `make` to make sure fossil can be compiled with necessary libraries in the platform.
+
+The compiled binary will be located in the same directory of Makefile, under `build` directory created above.
 
 ## Change log ##
 

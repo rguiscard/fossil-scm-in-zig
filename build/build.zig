@@ -28,20 +28,23 @@ pub fn build(b: *std.Build) void {
     const install_translate = b.addInstallArtifact(translate_exe, .{.dest_dir = .{.override = .{.custom = "./"}}});
     b.getInstallStep().dependOn(&install_translate.step);
 
+    // tools step to compile tools
     const tools_step = b.step("tools", "build tools");
     tools_step.dependOn(&install_translate.step);
 
-    //const x = b.addRunArtifact(translate_exe);
-    //x.addFileArg(.{.path = "../src/add.c"});
-    //_ = x.captureStdOut();
+    // translate step to preprocess source code
+    const translate_step = b.step("translate", "translate source code");
 
-    //const y = b.addRunArtifact(translate_exe);
-    //y.addFileArg(.{.path = "../src/ajax.c"});
-    //_ = y.captureStdOut();
+    const files = [_][]const u8{"add", "ajax"};
 
-    //const pack_step = b.step("pack", "Packs the game and assets together");
-    //pack_step.dependOn(&x.step);
-    //pack_step.dependOn(&y.step);
+    inline for(files) |file| {
+        std.log.info("Processing {s}\n", .{file});
+        const file_c = b.addRunArtifact(translate_exe);
+        file_c.addFileArg(.{.path = "../src/" ++ file ++ ".c"});
+        const file_c_path = file_c.captureStdOut();
+        const install_file_c = b.addInstallFile(file_c_path, "./" ++ file ++ "_.c");
+        translate_step.dependOn(&install_file_c.step);
+    }
 
     //std.log.info("All your codebase are belong to us. {s}", .{b.install_path});
 

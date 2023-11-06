@@ -8,13 +8,13 @@ Please see [README.fossil.md](README.fossil.md)
 
 ## Overview ##
 
-Original Fossil SCM can be compiled with typical `configure; make;` steps. Internally, it create configure files, creates several tools, preprocesses source codes, then do the final compilation, resulting a single `fossil` binary. It is a multi-step process. The goal of this repository is to recreate the same compilation process with Zig build system, namely `build.zig`. If possible, a single `zig build` can create `fossil` binary. Otherwise, it may take several steps to build the final binary.
+Original Fossil SCM can be compiled with typical `configure; make;` steps. Internally, it create configure files, creates several tools, preprocesses source codes, then do the final compilation, resulting a single `fossil` binary. It is a [multi-step process](https://fossil-scm.org/home/doc/trunk/www/makefile.wiki). The goal of this repository is to recreate the same compilation process with Zig build system, namely `build.zig`. If possible, a single `zig build` can create `fossil` binary. Otherwise, it may take several steps to build the final binary.
 
 ## Build ##
 
 ### Create build directory ###
 
-`mkdir build; cd build;`
+Inside Fossil SCM source code (e.g. `fossil-src-2.22/`), run `mkdir build; cd build;`
 
 ### Configuration ###
 
@@ -28,7 +28,7 @@ The compiled binary will be located in the same directory of Makefile, under `bu
 
 ### Build with zig cc ###
 
-`Zig cc` is a [drop-in replacement for GCC/Clang](https://andrewkelley.me/post/zig-cc-powerful-drop-in-replacement-gcc-clang.html). Therefore, let's replace `cc` with `zig cc` in Makefile and see. Go find `BCC` and `TCC` in Makefile and replace `cc` with `zig cc`. Then do `make` to compile. In my platform, there are errors aboud dns:
+`Zig cc` is a [drop-in replacement for GCC/Clang](https://andrewkelley.me/post/zig-cc-powerful-drop-in-replacement-gcc-clang.html). Therefore, let's replace `cc` with `zig cc` in Makefile and see. Go find `BCC` and `TCC` in Makefile and replace `cc` with `zig cc`. Then do `make` to compile. In my platform, there are errors about DNS:
 
 ```
 LLD Link... ld.lld: error: undefined symbol: __res_query
@@ -57,7 +57,7 @@ A new version of `fossil` is created and run `fossil version` to see it work.
 
 ### build.zig ###
 
-`build.zig` is at heart of zig build system. It declares the building process similar to Makefile. One thing to note is that it declares the relationship of building process, but does not actually build it. Therefore, the output declared in build.zig cannot be used in `build.zig`. Any output from `build.zig` can be accessed after `zig build` is finished. The second thing to notice is `zig build` is a shortcut to `zig build install`. And `install` in zig means installation to `./zig-out` subdirectory, not the system directory. `make install` usually installs into system directory. So it is fairly common to see the use of `zig build install` (or `zig build`) in development stage. It does not mean to install into `/usr/local/bin` or so, but just to `./zig-out/bin`. This may become important when we need to know where compiled or processed files are.
+`build.zig` is at heart of zig build system. It declares the building process similar to Makefile. One thing to note is that it declares the relationship of building process, but does not actually build it. Therefore, the output declared in `build.zig` cannot be used in `build.zig`. Any output from `build.zig` can be accessed after `zig build` is finished. The second thing to note is `zig build` is a shortcut to `zig build install`. And `install` in zig means installation to `./zig-out` subdirectory, not the system directory. `make install` usually installs into system directory. So it is fairly common to see the use of `zig build install` (or `zig build`) in development stage. It does not mean to install into `/usr/local/bin` or so, but just to `./zig-out/bin`. This may become important when we need to know where compiled or processed files are.
 
 Details about the Zig build system will not be explained here, just to show a working version. Some good articles can be found by searching online. Zig is still under active development and API is changing. Document a few years old may not apply now. I will try to keep this one updated. Now, it targets Zig `0.11.0`.
 
@@ -96,7 +96,7 @@ pub fn build(b: *std.Build) void {
 }
 ```
 
-Run `zig build` will create `zig-out/bin/translate` tool. If it is preferred to out `translate` tool under `build/bld` as what Makefile does, installation path can be assigned (not sure the right way):
+Run `zig build` will create `zig-out/bin/translate` tool. If it is preferred to put `translate` tool under `build/bld` as what Makefile does, installation path can be assigned (not sure the right way):
 
 ```
 const std = @import("std");
@@ -158,7 +158,63 @@ Steps:
 
 And run `zig build tools` will also create `translate` tool under `build/bld`.
 
+### Translate source code ###
+
+Fossil have several [preprocessing](https://fossil-scm.org/home/doc/trunk/www/makefile.wiki) steps and translation is one of it. It basically runs `translate src.c > src_.c`. To create such steps in `build.zig`, run step can used:
+
+```
+    const add_c = b.addRunArtifact(translate_exe);
+    add_c.addFileArg(.{.path = "../src/add.c"});
+    _ = add_c.captureStdOut();
+
+    const translate_step = b.step("translate", "translate source code");
+    translate_step.dependOn(&add_c.step);
+```
+
+A run artifact using `translate` is created, and a file `../src/add.c` is added as first argument. Because `translate` tool output into stdout, the result need to be captured. A translate step is also create and depends on this run step, and `zig build translate` will execute this preprocess.
+
+Where is the output after running `zig build translate` ? It is inside `zig-cache`. You need to find the newly created `stdout` file. It looks like this after run `head -n 1 zig-cache/o/b39399aa0d315231a7cf44a22994ea8f/stdout`
+
+```
+#line 1 ".../src/add.c"
+```
+
+Again, it can be installed into designated directory `build/bld` like this:
+
+```
+    const add_c = b.addRunArtifact(translate_exe);
+    add_c.addFileArg(.{.path = "../src/add.c"});
+    const add_c_path = add_c.captureStdOut();
+
+    const install_add_c = b.addInstallFile(add_c_path, "./add_.c");
+
+    const translate_step = b.step("translate", "translate source code");
+    translate_step.dependOn(&install_add_c.step);
+```
+
+`captureStdOut()` will return a path to the content of stdout, and it can be installed into a designated path with `addInstallFile()`. 
+
+To work at many source codes, try this:
+
+```
+    // translate step to preprocess source code
+    const translate_step = b.step("translate", "translate source code");
+
+    const files = [_][]const u8{"add", "ajax"};
+
+    inline for(files) |file| {
+        std.log.info("Processing {s}\n", .{file});
+        const file_c = b.addRunArtifact(translate_exe);
+        file_c.addFileArg(.{.path = "../src/" ++ file ++ ".c"});
+        const file_c_path = file_c.captureStdOut();
+        const install_file_c = b.addInstallFile(file_c_path, "./" ++ file ++ "_.c");
+        translate_step.dependOn(&install_file_c.step);
+    }
+```
+
+This version puts previous one into a loop. Please note the use of `inline for` because of comptime. Otherwise, it will complain `file` is not compiletime-known. Another note is that this `translate` step depends on `translate_exe`, but not `install_translate`. Therefore, it still compiles `translate` tool, but does not put it into `build/bld` directory. The whole process still works because Zig know where the compiled `translate` tool is inside _zig-out_ directory. Thus, there is no need to explicitly put `translate` to `build/bld` directory.
+
 ## Change log ##
 
-2023-11-06 import Fossil 2.22
-2023-11-06 repository created
+- 2023-11-06 import Fossil 2.22
+- 2023-11-06 repository created

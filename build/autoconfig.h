@@ -8,6 +8,8 @@
 #define FOSSIL_HAVE_GETPASS 1
 #define HAVE_ARPA_NAMESER_H 1
 #define HAVE_BACKTRACE 1
+/* For zig build */
+#define FOSSIL_OMIT_DNS 1
 /* #undef HAVE_BIND_RESOLV_H */
 #define HAVE_DLOPEN 1
 /* #undef HAVE_DN_EXPAND */

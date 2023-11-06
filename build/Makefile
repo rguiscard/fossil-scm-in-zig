@@ -30,14 +30,14 @@ OBJDIR = bld
 #    to compile code-generator programs as part of the build process.
 #    See TCC below for the C compiler for building the finished binary.
 #
-BCC = cc
+BCC = zig cc
 
 #### The suffix to add to final executable file.  When cross-compiling
 #    to windows, make this ".exe".  Otherwise leave it blank.
 #
 E = 
 
-TCC = cc
+TCC = zig cc
 
 #### Tcl shell for use in running the fossil testsuite.  If you do not
 #    care about testing the end result, this can be blank.

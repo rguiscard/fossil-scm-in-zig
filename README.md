@@ -160,7 +160,7 @@ And run `zig build tools` will also create `translate` tool under `build/bld`.
 
 ### Translate source code ###
 
-Fossil have several [preprocessing](https://fossil-scm.org/home/doc/trunk/www/makefile.wiki) steps and translation is one of it. It basically runs `translate src.c > src_.c`. To create such steps in `build.zig`, run step can used:
+Fossil has several [preprocessing](https://fossil-scm.org/home/doc/trunk/www/makefile.wiki) steps and translation is one of it. It basically runs `translate src.c > src_.c`. To create such steps in `build.zig`, run step can be used:
 
 ```
     const add_c = b.addRunArtifact(translate_exe);
@@ -171,7 +171,7 @@ Fossil have several [preprocessing](https://fossil-scm.org/home/doc/trunk/www/ma
     translate_step.dependOn(&add_c.step);
 ```
 
-A run artifact using `translate` is created, and a file `../src/add.c` is added as first argument. Because `translate` tool output into stdout, the result need to be captured. A translate step is also create and depends on this run step, and `zig build translate` will execute this preprocess.
+A run artifact using `translate` is created, and a file `../src/add.c` is added as first argument. Because `translate` tool output into stdout, the result needs to be captured. A translate step is also created and depends on this run step, and `zig build translate` will execute this preprocess.
 
 Where is the output after running `zig build translate` ? It is inside `zig-cache`. You need to find the newly created `stdout` file. It looks like this after run `head -n 1 zig-cache/o/b39399aa0d315231a7cf44a22994ea8f/stdout`
 
@@ -192,7 +192,7 @@ Again, it can be installed into designated directory `build/bld` like this:
     translate_step.dependOn(&install_add_c.step);
 ```
 
-`captureStdOut()` will return a path to the content of stdout, and it can be installed into a designated path with `addInstallFile()`. 
+`captureStdOut()` will return a path to the content of stdout, and it can be installed into a designated path with `addInstallFile()`. Please note that this `add_c_path` does not exist yet in `build.zig`. If you try to print its value, it will either be null or causes error. This value is only available after `zig build` is finished. Therefore, it can only be used as a way to pass information.
 
 To work at many source codes, try this:
 
@@ -200,9 +200,9 @@ To work at many source codes, try this:
     // translate step to preprocess source code
     const translate_step = b.step("translate", "translate source code");
 
-    const files = [_][]const u8{"add", "ajax"};
+    const src = [_][]const u8{"add", "ajax"};
 
-    inline for(files) |file| {
+    inline for(src) |file| {
         std.log.info("Processing {s}\n", .{file});
         const file_c = b.addRunArtifact(translate_exe);
         file_c.addFileArg(.{.path = "../src/" ++ file ++ ".c"});
@@ -212,7 +212,124 @@ To work at many source codes, try this:
     }
 ```
 
-This version puts previous one into a loop. Please note the use of `inline for` because of comptime. Otherwise, it will complain `file` is not compiletime-known. Another note is that this `translate` step depends on `translate_exe`, but not `install_translate`. Therefore, it still compiles `translate` tool, but does not put it into `build/bld` directory. The whole process still works because Zig know where the compiled `translate` tool is inside _zig-out_ directory. Thus, there is no need to explicitly put `translate` to `build/bld` directory.
+This version puts previous one into a loop. Please note the use of `inline for` because of comptime. Otherwise, it will complain `file` is not compiletime-known. Another note is that this `translate` step depends on `translate_exe`, but not `install_translate`. Therefore, it still compiles `translate` tool, but does not put it into `build/bld` directory. The whole process still works because Zig know where the compiled `translate` tool is inside _zig-cache_ directory. Thus, there is no need to explicitly put `translate` to `build/bld` directory. In other word, the part of `install_translate` can be removed in the future.
+
+### Preprocess: translate & mkindex ###
+
+`mkindex` will take all output of `translate` and extract into a `page_index.h`. Therefore, it is good to combine these two tools togehter into a preprocess step. 
+
+First, create these two tools:
+
+```
+    const translate_exe = b.addExecutable(.{
+        .name = "translate",
+        .root_source_file = null,
+        .target = target,
+        .optimize = optimize,
+    });
+
+    translate_exe.addCSourceFile(.{
+        .file = .{
+            .path = "../tools/translate.c",
+        },
+        .flags = &[_][]const u8 {}
+    });
+
+    translate_exe.linkLibC();
+
+    const mkindex_exe = b.addExecutable(.{
+        .name = "mkindex",
+        .root_source_file = null,
+        .target = target,
+        .optimize = optimize,
+    });
+
+    mkindex_exe.addCSourceFile(.{
+        .file = .{
+            .path = "../tools/mkindex.c",
+        },
+        .flags = &[_][]const u8 {}
+    });
+
+    mkindex_exe.linkLibC();
+```
+
+Build the args for each tool and create dependencies:
+
+```
+    // preprocess step to translate and mkindex
+    const preprocess_step = b.step("preprocess", "translate and mkindex source code");
+
+    // mkindex
+    const mkindex = b.addRunArtifact(mkindex_exe);
+
+    const src = [_][]const u8{"add", "ajax"};
+
+    inline for(src) |file| {
+        // translate
+        std.log.info("translate... {s}\n", .{file});
+        const file_c = b.addRunArtifact(translate_exe);
+        file_c.addFileArg(.{.path = "../src/" ++ file ++ ".c"});
+        const file_c_path = file_c.captureStdOut();
+        const install_file_c = b.addInstallFile(file_c_path, "./" ++ file ++ "_.c");
+
+        // add translate to preprocess_step
+        preprocess_step.dependOn(&install_file_c.step);
+
+        // build up args for mkindex
+        mkindex.addFileArg(file_c_path);
+    }
+
+    // mkindex
+    const mkindex_path = mkindex.captureStdOut();
+    const install_mkindex = b.addInstallFile(mkindex_path, "page_index.h");
+
+    // add mkindex to preprocess_step
+    preprocess_step.dependOn(&install_mkindex.step);
+```
+
+Now, run `zig build preprocess` will run both `translate` and `mkindex` and output into `build/bld` directory.
+
+### Preprocess: mkversion ###
+
+It runs as `mkversion manifest.uuid manifest VERSION > VERSION.h`. It follows previous `translate`:
+
+```
+    // #### mkversion ####
+
+    const mkversion_exe = b.addExecutable(.{
+        .name = "mkversion",
+        .root_source_file = null,
+        .target = target,
+        .optimize = optimize,
+    });
+
+    mkversion_exe.addCSourceFile(.{
+        .file = .{
+            .path = "../tools/mkversion.c",
+        },
+        .flags = &[_][]const u8 {}
+    });
+    mkversion_exe.linkLibC();
+
+    // translate step to preprocess source code
+    const mkversion_step = b.step("mkversion", "make VERSION.h");
+
+    std.log.info("mkversion...\n", .{});
+    const mkversion = b.addRunArtifact(mkversion_exe);
+    const version_files = [_][]const u8{"manifest.uuid", "manifest", "VERSION"};
+    inline for(version_files) |file| {
+      mkversion.addFileArg(.{.path = "../" ++ file});
+    }
+    const version_stdout = mkversion.captureStdOut();
+    const install_version = b.addInstallFile(version_stdout, "VERSION.h");
+    mkversion_step.dependOn(&install_version.step);
+
+    // add mkversion to preprocess_step
+    preprocess_step.dependOn(&install_version.step);
+```
+
+It is now quite straight forward to build and run these tools.
 
 ## Change log ##
 

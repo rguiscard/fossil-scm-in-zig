@@ -535,12 +535,12 @@ In the end, we need to link to libraries:
 
 ```
     fossil_exe.linkLibC();
-    fossil_exe.linkSystemLibrary("-lm");
-    fossil_exe.linkSystemLibrary("-lresolv");
-    fossil_exe.linkSystemLibrary("-lssl");
-    fossil_exe.linkSystemLibrary("-lcrypto");
-    fossil_exe.linkSystemLibrary("-lz");
-    fossil_exe.linkSystemLibrary("-ldl");
+    fossil_exe.linkSystemLibrary("m");
+    fossil_exe.linkSystemLibrary("resolv");
+    fossil_exe.linkSystemLibrary("ssl");
+    fossil_exe.linkSystemLibrary("crypto");
+    fossil_exe.linkSystemLibrary("z");
+    fossil_exe.linkSystemLibrary("dl");
 ```
 
 To include paths:
@@ -554,7 +554,7 @@ To include paths:
 
 Please note that which libraries to link depends on the result of `configure`. Therefore, it may be different from yours.
 
-`cflags`, `sqlite_options` and `shell_options` are too long to put here, but can be check out from source code.
+`cflags`, `sqlite_options` and `shell_options` are too long to put here, but can be check out from [source](build/build.zig).
 
 Finally add dependencies to install step:
 
@@ -564,7 +564,7 @@ Finally add dependencies to install step:
     b.getInstallStep().dependOn(&install_fossil.step);
 ```
 
-If it fails, try again. It seems to have racing issue somewhere.
+If it fails, try again. It seems to have racing issue somewhere and probably can be fixed by adjusting dependency graph.
 
 ### Run ###
 

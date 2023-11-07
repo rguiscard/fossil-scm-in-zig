@@ -158,7 +158,7 @@ Steps:
 
 And run `zig build tools` will also create `translate` tool under `build/bld`.
 
-### Translate source code ###
+### Preprocess: translate ###
 
 Fossil has several [preprocessing](https://fossil-scm.org/home/doc/trunk/www/makefile.wiki) steps and translation is one of it. It basically runs `translate src.c > src_.c`. To create such steps in `build.zig`, run step can be used:
 
@@ -370,7 +370,7 @@ It is now quite straight forward to build and run these tools.
 
 ### Preprocess: makeheaders ###
 
-[makeheaders](https://fossil-scm.org/home/doc/trunk/tools/makeheaders.html) works slight different. It takes `addArg` instead of `addFileArg`. And for some reason, it only works in `ReleaseFast` or `ReleaseSmall` mode.
+[makeheaders](https://fossil-scm.org/home/doc/trunk/tools/makeheaders.html) works slightly different. It takes `addArg` instead of `addFileArg`. And for some reasons, it only works with `ReleaseFast` or `ReleaseSmall` mode.
 
 ```
     const makeheaders_exe = b.addExecutable(.{
@@ -460,6 +460,128 @@ It is now quite straight forward to build and run these tools.
     preprocess_step.dependOn(&codecheck1.step);
 ```
 
+### touch ###
+
+There is a command `touch bld/headers` in Makefile and the use of it is unknown. But it is a good exercise to run a system tool in `build.zig`:
+
+```
+    // touch bld/headers
+    const touch = b.addSystemCommand(&[_][]const u8{
+      "touch", "bld/headers",
+    });
+
+    preprocess_step.dependOn(&touch.step);
+```
+
+### Compilation ###
+
+Once we get every file ready, we can start the compilation. The final binary is `fossil`, thus, use `b.addExecutable()` to create one and add all sources and dependencies.
+
+First, create a fossil binary: 
+
+```
+    const fossil_exe = b.addExecutable(.{
+        .name = "fossil",
+        .root_source_file = null,
+        .target = target,
+        .optimize = optimize,
+    });
+```
+
+Add accessory files:
+
+```
+    fossil_exe.addCSourceFile(.{
+        .file = .{ .path = "../extsrc/sqlite3.c" },
+        .flags = &(cflags ++ sqlite_options),
+    });
+
+    fossil_exe.addCSourceFile(.{
+        .file = .{ .path = "../extsrc/linenoise.c" },
+        .flags = &cflags,
+    });
+
+    fossil_exe.addCSourceFile(.{
+        .file = .{ .path = "../extsrc/pikchr.c" },
+        .flags = &(cflags ++ pikchr_options),
+    });
+
+    fossil_exe.addCSourceFile(.{
+        .file = .{ .path = "../extsrc/shell.c" },
+        .flags = &(cflags ++ shell_options),
+    });
+
+    const extsrc = [_][]const u8{"src/th.c", "src/th_lang.c", "src/th_tcl.c", "extsrc/cson_amalgamation.c"};
+    inline for(extsrc) |file| {
+        fossil_exe.addCSourceFile(.{
+            .file = .{ .path = "../" ++ file },
+            .flags = &cflags,
+        });
+    }
+```
+
+Add main source code:
+
+```
+    inline for(src) |file| {
+        fossil_exe.addCSourceFile(.{
+            .file = .{ .path = "bld/" ++ file ++ "_.c"},
+            .flags = &cflags,
+        });
+    }
+```
+
+In the end, we need to link to libraries:
+
+```
+    fossil_exe.linkLibC();
+    fossil_exe.linkSystemLibrary("-lm");
+    fossil_exe.linkSystemLibrary("-lresolv");
+    fossil_exe.linkSystemLibrary("-lssl");
+    fossil_exe.linkSystemLibrary("-lcrypto");
+    fossil_exe.linkSystemLibrary("-lz");
+    fossil_exe.linkSystemLibrary("-ldl");
+```
+
+To include paths:
+
+```
+    fossil_exe.addIncludePath(.{.cwd_relative = "./"}); // .path = {} doesn't work for unknown reason
+    fossil_exe.addIncludePath(.{.cwd_relative = "bld"});
+    fossil_exe.addIncludePath(.{.cwd_relative = "../src"});
+    fossil_exe.addIncludePath(.{.cwd_relative = "../extsrc"});
+```
+
+Please note that which libraries to link depends on the result of `configure`. Therefore, it may be different from yours.
+
+`cflags`, `sqlite_options` and `shell_options` are too long to put here, but can be check out from source code.
+
+Finally add dependencies to install step:
+
+```
+    const install_fossil = b.addInstallArtifact(fossil_exe, .{});
+    b.getInstallStep().dependOn(&(preprocess_step.*));
+    b.getInstallStep().dependOn(&install_fossil.step);
+```
+
+If it fails, try again. It seems to have racing issue somewhere.
+
+### Run ###
+
+A run step can also be created to run compiled binary: 
+
+```
+    const run_cmd = b.addRunArtifact(fossil_exe);
+    run_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
+    const run_step = b.step("run", "Run the app");
+    run_step.dependOn(&run_cmd.step);
+```
+
+Then `zig build run -- version` is the same as `zig-out/bin/fossil version`.
+
 ## What's next ##
 
 There is no plan for next steps. Fossil SCM provides ways to create [new features](https://fossil-scm.org/home/doc/trunk/www/adding_code.wiki), either a new command or a new web page. Therefore, it is easy to customize. The only possible next step is to see whether Zig build system can also replace `configure` step. But it is not an urgent task for now.
@@ -471,4 +593,4 @@ There is no plan for next steps. Fossil SCM provides ways to create [new feature
 
 ## Why host on Github ? ###
 
-I also keep asking myself this question frequently. Fossil SCM can host itself easily. The answer I can come out with is the social effect of github. With single account, I can interact with all kinds of repositories. So it is less about Fossil vs Git, but more about the platform providing social effect. Github allows a project to be seen by people unknown to me. It is a platform for publishing codes.
+I also keep asking myself this question frequently. Fossil SCM can host itself easily. The answer I can come out with is the social effect of github. With single account, I can interact with all kinds of repositories. So it is less about Fossil vs Git, but more about the platform providing social effect. Github allows a project to be seen by people unknown to me. It is a platform for publishing and discovering codes.

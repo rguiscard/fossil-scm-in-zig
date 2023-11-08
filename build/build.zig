@@ -290,9 +290,6 @@ pub fn build(b: *std.Build) void {
     // const install_translate = b.addInstallArtifact(translate_exe, .{.dest_dir = .{.override = .{.custom = "./"}}});
     // b.getInstallStep().dependOn(&install_translate.step);
 
-    // preprocess step to translate and mkindex
-    const preprocess_step = b.step("preprocess", "translate and mkindex source code");
-
     // mkindex
     const mkindex = b.addRunArtifact(mkindex_exe);
 
@@ -306,24 +303,20 @@ pub fn build(b: *std.Build) void {
         const file_c_path = file_c.captureStdOut();
         const install_file_c = b.addInstallFile(file_c_path, "./" ++ file ++ "_.c");
 
-        preprocess_step.dependOn(&install_file_c.step);
-
         // build up args for mkindex
         mkindex.addFileArg(file_c_path);
+        mkindex.step.dependOn(&install_file_c.step);
 
         // build up args for codecheck1
         codecheck1.addFileArg(file_c_path);
+        codecheck1.step.dependOn(&install_file_c.step);
     }
 
     // mkindex output
     const mkindex_path = mkindex.captureStdOut();
     const install_mkindex = b.addInstallFile(mkindex_path, "page_index.h");
 
-    preprocess_step.dependOn(&install_mkindex.step);
-    preprocess_step.dependOn(&codecheck1.step);
-
     // #### mkversion ####
-
     const mkversion_exe = b.addExecutable(.{
         .name = "mkversion",
         .root_source_file = null,
@@ -339,9 +332,6 @@ pub fn build(b: *std.Build) void {
     });
     mkversion_exe.linkLibC();
 
-    // mkversion step to preprocess source code
-    const mkversion_step = b.step("mkversion", "make VERSION.h");
-
     const mkversion = b.addRunArtifact(mkversion_exe);
     const version_files = [_][]const u8{"manifest.uuid", "manifest", "VERSION"};
     inline for(version_files) |file| {
@@ -349,10 +339,6 @@ pub fn build(b: *std.Build) void {
     }
     const version_stdout = mkversion.captureStdOut();
     const install_version = b.addInstallFile(version_stdout, "VERSION.h");
-    mkversion_step.dependOn(&install_version.step);
-
-    // add mkversion to preprocess_step
-    preprocess_step.dependOn(&install_version.step);
 
     // #### mkbuiltin ####
 
@@ -371,22 +357,14 @@ pub fn build(b: *std.Build) void {
     });
     mkbuiltin_exe.linkLibC();
 
-    // mkbuiltin step to preprocess source code
-    const mkbuiltin_step = b.step("mkbuiltin", "make builtin data");
-
     const mkbuiltin = b.addRunArtifact(mkbuiltin_exe);
     inline for(builtin_files) |file| {
       mkbuiltin.addFileArg(.{.path = "../" ++ file});
     }
     const builtin_stdout = mkbuiltin.captureStdOut();
     const install_builtin = b.addInstallFile(builtin_stdout, "builtin_data.h");
-    mkbuiltin_step.dependOn(&install_builtin.step);
-
-    // add mkversion to preprocess_step
-    preprocess_step.dependOn(&install_builtin.step);
 
     // #### makeheaders ####
-
     const makeheaders_exe = b.addExecutable(.{
         .name = "makeheaders",
         .root_source_file = null,
@@ -402,9 +380,6 @@ pub fn build(b: *std.Build) void {
     });
     makeheaders_exe.linkLibC();
 
-    // makeheaders step to preprocess source code
-    const makeheaders_step = b.step("makeheaders", "make headers");
-
     const makeheaders = b.addRunArtifact(makeheaders_exe);
     inline for(src) |file| {
       makeheaders.addArg("./bld/" ++ file ++ "_.c:./bld/" ++ file ++ ".h");
@@ -418,17 +393,18 @@ pub fn build(b: *std.Build) void {
     inline for(extra_headers) |file| {
       makeheaders.addArg(file);
     }
-    makeheaders_step.dependOn(&makeheaders.step);
 
-    // add mkversion to preprocess_step
-    preprocess_step.dependOn(&makeheaders.step);
+    makeheaders.step.dependOn(&install_mkindex.step);
+    makeheaders.step.dependOn(&codecheck1.step);
+    makeheaders.step.dependOn(&install_version.step);
+    makeheaders.step.dependOn(&install_builtin.step);
 
     // touch bld/headers
     const touch = b.addSystemCommand(&[_][]const u8{
       "touch", "bld/headers",
     });
 
-    preprocess_step.dependOn(&touch.step);
+    touch.step.dependOn(&makeheaders.step);
 
     // fossil binary
     const fossil_exe = b.addExecutable(.{
@@ -491,8 +467,9 @@ pub fn build(b: *std.Build) void {
     fossil_exe.addIncludePath(.{.cwd_relative = "../src"});
     fossil_exe.addIncludePath(.{.cwd_relative = "../extsrc"});
 
+    fossil_exe.step.dependOn(&touch.step);
+
     const install_fossil = b.addInstallArtifact(fossil_exe, .{});
-    b.getInstallStep().dependOn(&(preprocess_step.*));
     b.getInstallStep().dependOn(&install_fossil.step);
 
     // This *creates* a Run step in the build graph, to be executed when another

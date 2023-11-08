@@ -564,7 +564,7 @@ Finally add dependencies to install step:
     b.getInstallStep().dependOn(&install_fossil.step);
 ```
 
-If it fails, try again. It seems to have racing issue somewhere and probably can be fixed by adjusting dependency graph.
+Run `zig build` to build the final binary. If it fails, run again. [This version](https://github.com/rguiscard/fossil-scm-in-zig/blob/1c89a63a515c47756cdfb6c622affef1a4c18143/build/build.zig) has a racing issue. [The current one](build/build.zig) fixes it by adjusting dependency graph.
 
 ### Run ###
 

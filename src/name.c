@@ -401,6 +401,7 @@ static int is_trailing_punct(char c){
 */
 int symbolic_name_to_rid(const char *zTag, const char *zType){
   int rid = 0;
+  int ridCkout = 0;
   int nTag;
   int i;
   int startOfBranch = 0;
@@ -436,18 +437,22 @@ int symbolic_name_to_rid(const char *zTag, const char *zType){
     if( rid ) return rid;
   }
 
+  if( g.localOpen ) {
+    ridCkout = db_lget_int("checkout",0);
+  }
+
   /* special keywords: "prev", "previous", "current", "ckout", and
   ** "next" */
-  if( g.localOpen>0 && (zType[0]=='*' || isCheckin!=0) ){
-    const int vid = g.localOpen;
+  if( (zType[0]=='*' || isCheckin!=0) && 0<ridCkout ){
     if( fossil_strcmp(zTag, "current")==0 ){
-      rid = vid;
+      rid = ridCkout;
     }else if( fossil_strcmp(zTag, "prev")==0
               || fossil_strcmp(zTag, "previous")==0 ){
-      rid = db_int(0, "SELECT pid FROM plink WHERE cid=%d AND isprim", vid);
+      rid = db_int(0, "SELECT pid FROM plink WHERE cid=%d AND isprim",
+                   ridCkout);
     }else if( fossil_strcmp(zTag, "next")==0 ){
       rid = db_int(0, "SELECT cid FROM plink WHERE pid=%d"
-                      "  ORDER BY isprim DESC, mtime DESC", vid);
+                      "  ORDER BY isprim DESC, mtime DESC", ridCkout);
     }else if( isCheckin>1 && fossil_strcmp(zTag, "ckout")==0 ){
       rid = RID_CKOUT;
     }
@@ -981,8 +986,10 @@ char const * whatis_rid_type_label(int rid){
 ** Flag values for whatis_rid().
 */
 #if INTERFACE
-#define WHATIS_VERBOSE 0x01    /* Extra output */
-#define WHATIS_BRIEF   0x02    /* Omit unnecessary output */
+#define WHATIS_VERBOSE   0x01    /* Extra output */
+#define WHATIS_BRIEF     0x02    /* Omit unnecessary output */
+#define WHATIS_REPO      0x04    /* Show repository name */
+#define WHATIS_OMIT_UNK  0x08    /* Do not show "unknown" lines */
 #endif
 
 /*
@@ -1156,7 +1163,7 @@ void whatis_artifact(
     const char *zName,    /* Symbolic name or full hash */
     const char *zFileName,/* Optional: original filename (in file mode) */
     const char *zType,    /* Artifact type filter */
-    int verboseFlag       /* Verbosity flag */
+    int mFlags            /* WHATIS_* flags */
 ){
   const char* zNameTitle = "name:";
   int rid = symbolic_name_to_rid(zName, zType);
@@ -1167,6 +1174,9 @@ void whatis_artifact(
   if( rid<0 ){
     Stmt q;
     int cnt = 0;
+    if( mFlags & WHATIS_REPO ){
+      fossil_print("\nrepository: %s\n", g.zRepositoryName);
+    }
     fossil_print("%-12s%s (ambiguous)\n", zNameTitle, zName);
     db_prepare(&q,
         "SELECT rid FROM blob WHERE uuid>=lower(%Q) AND uuid<(lower(%Q)||'z')",
@@ -1174,15 +1184,20 @@ void whatis_artifact(
         );
     while( db_step(&q)==SQLITE_ROW ){
       if( cnt++ ) fossil_print("%12s---- meaning #%d ----\n", " ", cnt);
-      whatis_rid(db_column_int(&q, 0), verboseFlag);
+      whatis_rid(db_column_int(&q, 0), mFlags);
     }
     db_finalize(&q);
   }else if( rid==0 ){
-    /* 0123456789 12 */
-    fossil_print("unknown:    %s\n", zName);
+    if( (mFlags & WHATIS_OMIT_UNK)==0 ){
+                 /* 0123456789 12 */
+      fossil_print("unknown:    %s\n", zName);
+    }
   }else{
+    if( mFlags & WHATIS_REPO ){
+      fossil_print("\nrepository: %s\n", g.zRepositoryName);
+    }
     fossil_print("%-12s%s\n", zNameTitle, zName);
-    whatis_rid(rid, verboseFlag);
+    whatis_rid(rid, mFlags);
   }
 }
 
@@ -1198,17 +1213,23 @@ void whatis_artifact(
 ** Options:
 **    -f|--file            Find artifacts with the same hash as file NAME.
 **                         If NAME is "-", read content from standard input.
+**    -q|--quiet           Show nothing if NAME is not found
 **    --type TYPE          Only find artifacts of TYPE (one of: 'ci', 't',
 **                         'w', 'g', or 'e')
 **    -v|--verbose         Provide extra information (such as the RID)
 */
 void whatis_cmd(void){
-  int verboseFlag;
+  int mFlags = 0;
   int fileFlag;
   int i;
   const char *zType = 0;
   db_find_and_open_repository(0,0);
-  verboseFlag = find_option("verbose","v",0)!=0;
+  if( find_option("verbose","v",0)!=0 ){
+    mFlags |= WHATIS_VERBOSE;
+  }
+  if( find_option("quiet","q",0)!=0 ){
+    mFlags |= WHATIS_OMIT_UNK | WHATIS_REPO;
+  }
   fileFlag = find_option("file","f",0)!=0;
   zType = find_option("type",0,1);
 
@@ -1237,10 +1258,10 @@ void whatis_cmd(void){
         hname_hash(&in, 0, &hash);
         zHash = (const char*)blob_str(&hash);
       }
-      whatis_artifact(zHash, zName, zType, verboseFlag);
+      whatis_artifact(zHash, zName, zType, mFlags);
       blob_reset(&hash);
     }else{
-      whatis_artifact(zName, 0, zType, verboseFlag);
+      whatis_artifact(zName, 0, zType, mFlags);
     }
   }
 }
@@ -1637,6 +1658,7 @@ void bloblist_page(void){
 
   login_check_credentials();
   if( !g.perm.Read ){ login_needed(g.anon.Read); return; }
+  cgi_check_for_malice();
   style_header("List Of Artifacts");
   style_submenu_element("250 Largest", "bigbloblist");
   if( g.perm.Admin ){

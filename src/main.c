@@ -258,8 +258,12 @@ struct Global {
 #endif
 
   /* For defense against Cross-site Request Forgery attacks */
-  char zCsrfToken[12];    /* Value of the anti-CSRF token */
-  int okCsrf;             /* Anti-CSRF token is present and valid */
+  char zCsrfToken[16];    /* Value of the anti-CSRF token */
+  int okCsrf;             /* -1:  unsafe
+                          **  0:  unknown
+                          **  1:  same origin
+                          **  2:  same origin + is POST
+                          **  3:  same origin, POST, valid csrf token */
 
   int parseCnt[10];       /* Counts of artifacts parsed */
   FILE *fDebug;           /* Write debug information here, if the file exists */
@@ -714,10 +718,10 @@ int fossil_main(int argc, char **argv){
   /* When updating the minimum SQLite version, change the number here,
   ** and also MINIMUM_SQLITE_VERSION value set in ../auto.def.  Take
   ** care that both places agree! */
-  if( sqlite3_libversion_number()<3038000
-   || strncmp(sqlite3_sourceid(),"2022-01-12",10)<0
+  if( sqlite3_libversion_number()<3043000
+   || strncmp(sqlite3_sourceid(),"2023-06-12",10)<0
   ){
-    fossil_panic("Unsuitable SQLite version %s, must be at least 3.38.0",
+    fossil_panic("Unsuitable SQLite version %s, must be at least 3.43.0",
                  sqlite3_libversion());
   }
 
@@ -1022,7 +1026,6 @@ const char *find_option(const char *zLong, const char *zShort, int hasArg){
   nLong = strlen(zLong);
   for(i=1; i<g.argc; i++){
     char *z;
-    if( i+hasArg >= g.argc ) break;
     z = g.argv[i];
     if( z[0]!='-' ) continue;
     z++;
@@ -1040,11 +1043,13 @@ const char *find_option(const char *zLong, const char *zShort, int hasArg){
         remove_from_argv(i, 1);
         break;
       }else if( z[nLong]==0 ){
+        if( i+hasArg >= g.argc ) break;
         zReturn = g.argv[i+hasArg];
         remove_from_argv(i, 1+hasArg);
         break;
       }
     }else if( fossil_strcmp(z,zShort)==0 ){
+      if( i+hasArg >= g.argc ) break;
       zReturn = g.argv[i+hasArg];
       remove_from_argv(i, 1+hasArg);
       break;
@@ -2002,16 +2007,13 @@ static void process_one_web_page(
   /* Make g.zPath point to the first element of the path.  Make
   ** g.zExtra point to everything past that point.
   */
-  while(1){
-    g.zPath = &zPath[1];
-    for(i=1; zPath[i] && zPath[i]!='/'; i++){}
-    if( zPath[i]=='/' ){
-      zPath[i] = 0;
-      g.zExtra = &zPath[i+1];
-    }else{
-      g.zExtra = 0;
-    }
-    break;
+  g.zPath = &zPath[1];
+  for(i=1; zPath[i] && zPath[i]!='/'; i++){}
+  if( zPath[i]=='/' ){
+    zPath[i] = 0;
+    g.zExtra = &zPath[i+1];
+  }else{
+    g.zExtra = 0;
   }
   if( g.zExtra ){
     /* CGI parameters get this treatment elsewhere, but places like getfile
@@ -2102,7 +2104,7 @@ static void process_one_web_page(
     }
     if( g.fCgiTrace ){
       fossil_trace("######## Calling %s #########\n", pCmd->zName);
-      cgi_print_all(1, 1);
+      cgi_print_all(1, 1, 0);
     }
 #ifdef FOSSIL_ENABLE_TH1_HOOKS
     {
@@ -2567,7 +2569,7 @@ void cmd_cgi(void){
       blob_reset(&value);
       cgi_debug("-------- BEGIN cgi at %s --------\n", zNow);
       fossil_free(zNow);
-      cgi_print_all(1,2);
+      cgi_print_all(1,2,0);
       continue;
     }
   }
@@ -2625,6 +2627,7 @@ static void find_server_repository(int arg, int fCreate){
         zPassword = db_text(0, "SELECT pw FROM user WHERE login=%Q", g.zLogin);
         fossil_print("admin-user: %s (initial password is \"%s\")\n",
                      g.zLogin, zPassword);
+        hash_user_password(g.zLogin);
         cache_initialize();
         g.zLogin = 0;
         g.userUid = 0;
@@ -3008,6 +3011,13 @@ static int nAlarmSeconds = 0;
 static void sigalrm_handler(int x){
   sqlite3_uint64 tmUser = 0, tmKernel = 0;
   fossil_cpu_times(&tmUser, &tmKernel);
+  if( fossil_strcmp(g.zPhase, "web-page reply")==0
+   && tmUser+tmKernel<1000000
+  ){
+    /* Do not log time-outs during web-page reply unless more than
+    ** 1 second of CPU time has been consumed */
+    return;
+  }
   fossil_panic("Timeout after %d seconds during %s"
                " - user %,llu µs, sys %,llu µs",
                nAlarmSeconds, g.zPhase, tmUser, tmKernel);
@@ -3056,7 +3066,11 @@ void fossil_set_timeout(int N){
 ** If REPOSITORY begins with a "HOST:" or "USER@HOST:" prefix, then
 ** the command is run on the remote host specified and the results are
 ** tunneled back to the local machine via SSH.  This feature only works for
-** the "fossil ui" command, not the "fossil server" command.
+** the "fossil ui" command, not the "fossil server" command.  The name of the
+** fossil executable on the remote host is specified by the --fossilcmd option,
+** or if there is no --fossilcmd, it first tries "$HOME/bin/fossil" and if
+** not found there it searches for any executable named "fossil" on the
+** default $PATH set by SSH on the remote.
 **
 ** REPOSITORY may also be a directory (aka folder) that contains one or
 ** more repositories with names ending in ".fossil".  In this case, a
@@ -3094,10 +3108,11 @@ void fossil_set_timeout(int N){
 **   --ckout-alias NAME  Treat URIs of the form /doc/NAME/... as if they were
 **                       /doc/ckout/...
 **   --create            Create a new REPOSITORY if it does not already exist
+**   --errorlog FILE     Append HTTP error messages to FILE
 **   --extroot DIR       Document root for the /ext extension mechanism
 **   --files GLOBLIST    Comma-separated list of glob patterns for static files
-**   --fossilcmd PATH    Full pathname of the "fossil" executable on the remote
-**                       system when REPOSITORY is remote.  Default: "fossil"
+**   --fossilcmd PATH    The pathname of the "fossil" executable on the remote
+**                       system when REPOSITORY is remote.
 **   --localauth         Enable automatic login for requests from localhost
 **   --localhost         Listen on 127.0.0.1 only (always true for "ui")
 **   --https             Indicates that the input is coming through a reverse
@@ -3334,11 +3349,16 @@ void cmd_webserver(void){
     blob_init(&ssh, 0, 0);
     transport_ssh_command(&ssh);
     db_close_config();
-    if( zFossilCmd==0 ) zFossilCmd = "fossil";
     blob_appendf(&ssh, 
-       " -t -L 127.0.0.1:%d:127.0.0.1:%d %!$"
-       " %$ ui --nobrowser --localauth --port %d",
-       iPort, iPort, zRemote, zFossilCmd, iPort);
+       " -t -L 127.0.0.1:%d:127.0.0.1:%d %!$",
+       iPort, iPort, zRemote
+    );
+    if( zFossilCmd==0 ){
+      blob_appendf(&ssh, " %$ fossil", "PATH=$HOME/bin:$PATH");
+    }else{
+      blob_appendf(&ssh, " %$", zFossilCmd);
+    }
+    blob_appendf(&ssh, " ui --nobrowser --localauth --port %d", iPort);
     if( zNotFound ) blob_appendf(&ssh, " --notfound %!$", zNotFound);
     if( zFileGlob ) blob_appendf(&ssh, " --files-urlenc %T", zFileGlob);
     if( g.zCkoutAlias ) blob_appendf(&ssh, " --ckout-alias %!$",g.zCkoutAlias);

@@ -117,6 +117,7 @@ void home_page(void){
   char *zPageName = db_get("project-name",0);
   char *zIndexPage = db_get("index-page",0);
   login_check_credentials();
+  cgi_check_for_malice();
   if( zIndexPage ){
     const char *zPathInfo = P("PATH_INFO");
     while( zIndexPage[0]=='/' ) zIndexPage++;
@@ -552,6 +553,7 @@ void wiki_page(void){
   login_check_credentials();
   if( !g.perm.RdWiki ){ login_needed(g.anon.RdWiki); return; }
   zPageName = P("name");
+  cgi_check_for_malice();
   if( zPageName==0 ){
     if( search_restrict(SRCH_WIKI)!=0 ){
       wiki_srchpage();
@@ -637,7 +639,7 @@ int wiki_put(Blob *pWiki, int parent, int needMod){
     moderation_table_create();
     db_multi_exec("INSERT INTO modreq(objid) VALUES(%d)", nrid);
   }
-  db_multi_exec("INSERT OR IGNORE INTO unsent VALUES(%d)", nrid);
+  db_add_unsent(nrid);
   db_multi_exec("INSERT OR IGNORE INTO unclustered VALUES(%d);", nrid);
   manifest_crosslink(nrid, pWiki, MC_NONE);
   if( login_is_individual() ){
@@ -1632,6 +1634,7 @@ void wikiappend_page(void){
   }
   if( !isSandbox && P("submit")!=0 && P("r")!=0 && P("u")!=0
    && (goodCaptcha = captcha_is_correct(0))
+   && cgi_csrf_safe(2)
   ){
     char *zDate;
     Blob cksum;
@@ -1639,7 +1642,6 @@ void wikiappend_page(void){
     Blob wiki;
 
     blob_zero(&body);
-    login_verify_csrf_secret();
     blob_append(&body, pWiki->zWiki, -1);
     blob_zero(&wiki);
     db_begin_transaction();
@@ -1695,7 +1697,6 @@ void wikiappend_page(void){
   }
   zUser = PD("u", g.zLogin);
   form_begin(0, "%R/wikiappend");
-  login_insert_csrf_secret();
   @ <input type="hidden" name="name" value="%h(zPageName)">
   @ <input type="hidden" name="mimetype" value="%h(zMimetype)">
   @ Your Name:
@@ -1844,6 +1845,7 @@ void wdiff_page(void){
   if( ( zPid==0 || zPid[0] == 0 ) && pW1->nParent ){
     zPid = pW1->azParent[0];
   }
+  cgi_check_for_malice();
   if( zPid && zPid[0] != 0 ){
     char *zDate;
     rid2 = name_to_typed_rid(zPid, "w");
@@ -1931,6 +1933,7 @@ void wcontent_page(void){
   }else{
     style_submenu_element("All", "%R/wcontent?all=1");
   }
+  cgi_check_for_malice();
   showCkBr = db_exists(
     "SELECT tag.tagname AS tn FROM tag JOIN tagxref USING(tagid) "
     "WHERE ( tn GLOB 'wiki-checkin/*' OR tn GLOB 'wiki-branch/*' ) "
@@ -2008,6 +2011,7 @@ void wfind_page(void){
   login_check_credentials();
   if( !g.perm.RdWiki ){ login_needed(g.anon.RdWiki); return; }
   zTitle = PD("title","*");
+  cgi_check_for_malice();
   style_set_current_feature("wiki");
   style_header("Wiki Pages Found");
   @ <ul>

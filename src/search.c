@@ -928,7 +928,7 @@ static void search_indexed(
   sqlite3_create_function(g.db, "rank", 1, SQLITE_UTF8|SQLITE_INNOCUOUS, 0,
      search_rank_sqlfunc, 0, 0);
   for(i=0; zPat[i]; i++){
-    if( (zPat[i]&0x80)!=0 || !fossil_isalnum(zPat[i]) ) zPat[i] = ' ';
+    if( (zPat[i]&0x80)==0 && !fossil_isalnum(zPat[i]) ) zPat[i] = ' ';
   }
   blob_init(&sql, 0, 0);
   if( search_index_type(0)==4 ){
@@ -1221,6 +1221,7 @@ void search_page(void){
   const int isSearch = P("s")!=0;
   login_check_credentials();
   style_header("Search%s", isSearch ? " Results" : "");
+  cgi_check_for_malice();
   search_screen(SRCH_ALL, 1);
   style_finish_page();
 }
@@ -1552,9 +1553,10 @@ static const char zFtsDrop[] =
 /*
 ** Values for the search-tokenizer config option.
 */
-#define FTS5TOK_NONE     0 /* no FTS stemmer */
-#define FTS5TOK_PORTER   1 /* porter stemmer */
-#define FTS5TOK_TRIGRAM  3 /* trigram stemmer */
+#define FTS5TOK_NONE      0 /* disabled */
+#define FTS5TOK_PORTER    1 /* porter stemmer */
+#define FTS5TOK_UNICODE61 2 /* unicode61 tokenizer */
+#define FTS5TOK_TRIGRAM   3 /* trigram tokenizer */
 #endif
 
 /*
@@ -1579,6 +1581,8 @@ int search_tokenizer_type(int bRecheck){
     iFtsTokenizer = FTS5TOK_NONE;
   }else if(0==fossil_strcmp(z,"porter")){
     iFtsTokenizer = FTS5TOK_PORTER;
+  }else if(0==fossil_strcmp(z,"unicode61")){
+    iFtsTokenizer = FTS5TOK_UNICODE61;
   }else if(0==fossil_strcmp(z,"trigram")){
     iFtsTokenizer = FTS5TOK_TRIGRAM;
   }else{
@@ -1607,6 +1611,8 @@ const char *search_tokenizer_for_string(const char *z){
     zRc = "off";
   }else if( 0==fossil_strcmp(z,"porter") ){
     zRc = "porter";
+  }else if( 0==fossil_strcmp(z,"unicode61") ){
+    zRc = "unicode61";
   }else if( 0==fossil_strcmp(z,"trigram") ){
     zRc = "trigram";
   }else{
@@ -1634,6 +1640,7 @@ void search_create_index(void){
   const char *zExtra;
   switch(useTokenizer){
     case FTS5TOK_PORTER: zExtra = ",tokenize=porter"; break;
+    case FTS5TOK_UNICODE61: zExtra = ",tokenize=unicode61"; break;
     case FTS5TOK_TRIGRAM: zExtra = ",tokenize=trigram"; break;
     default: zExtra = ""; break;
   }
@@ -1976,14 +1983,15 @@ void search_rebuild_index(void){
 **
 **     index (on|off)     Turn the search index on or off
 **
-**     enable cdtwe       Enable various kinds of search. c=Check-ins,
-**                        d=Documents, t=Tickets, w=Wiki, e=Tech Notes.
+**     enable cdtwef      Enable various kinds of search. c=Check-ins,
+**                        d=Documents, t=Tickets, w=Wiki, e=Tech Notes,
+**                        f=Forum.
 **
-**     disable cdtwe      Disable various kinds of search
+**     disable cdtwef     Disable various kinds of search
 **
 **     tokenizer VALUE    Select a tokenizer for indexed search. VALUE
-**                        may be one of (porter, on, off, trigram), and
-**                        "on" is equivalent to "porter". Unindexed
+**                        may be one of (porter, on, off, trigram, unicode61),
+**                        and "on" is equivalent to "porter". Unindexed
 **                        search never uses tokenization or stemming.
 **
 ** The current search settings are displayed after any changes are applied.
@@ -2027,7 +2035,7 @@ void fts_config_cmd(void){
       Blob all;
       blob_init(&all,0,0);
       for(i=0; i<count(aCmd); i++) blob_appendf(&all, " %s", aCmd[i].z);
-      fossil_fatal("unknown \"%s\" - should be on of:%s",
+      fossil_fatal("unknown \"%s\" - should be one of:%s",
                    zSubCmd, blob_str(&all));
       return;
     }
@@ -2057,7 +2065,7 @@ void fts_config_cmd(void){
     }
   }else if( iCmd==5 ){
     int iOldTokenizer, iNewTokenizer;
-    if( g.argc<4 ) usage("tokenizer porter|on|off|trigram");
+    if( g.argc<4 ) usage("tokenizer porter|on|off|trigram|unicode61");
     iOldTokenizer = search_tokenizer_type(0);
     db_set("search-tokenizer",
            search_tokenizer_for_string(g.argv[3]), 0);
@@ -2085,9 +2093,18 @@ void fts_config_cmd(void){
   fossil_print("%-17s %s\n", "tokenizer:",
        search_tokenizer_for_string(0));
   if( search_index_exists() ){
+    int pgsz = db_int64(0, "PRAGMA repository.page_size;");
+    i64 nTotal = db_int64(0, "PRAGMA repository.page_count;")*pgsz;
+    i64 nFts = db_int64(0, "SELECT count(*) FROM dbstat"
+                               " WHERE schema='repository'"
+                               " AND name LIKE 'fts%%'")*pgsz;
+    char zSize[50];
     fossil_print("%-17s FTS%d\n", "full-text index:", search_index_type(1));
     fossil_print("%-17s %d\n", "documents:",
        db_int(0, "SELECT count(*) FROM ftsdocs"));
+    approxSizeName(sizeof(zSize), zSize, nFts);
+    fossil_print("%-17s %s (%.1f%% of repository)\n", "space used",
+       zSize, 100.0*((double)nFts/(double)nTotal));
   }else{
     fossil_print("%-17s disabled\n", "full-text index:");
   }

@@ -51,6 +51,21 @@
 #endif
 #include <time.h>
 
+/*
+** Compute an appropriate Anti-CSRF token into g.zCsrfToken[].
+*/
+static void login_create_csrf_secret(const char *zSeed){
+  unsigned char zResult[20];
+  int i;
+
+  sha1sum_binary(zSeed, zResult);
+  for(i=0; i<sizeof(g.zCsrfToken)-1; i++){
+    g.zCsrfToken[i] = "abcdefghijklmnopqrstuvwxyz"
+                      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                      "0123456789-/"[zResult[i]%64];
+  }
+  g.zCsrfToken[i] = 0;
+}
 
 /*
 ** Return the login-group name.  Or return 0 if this repository is
@@ -146,7 +161,7 @@ int login_is_valid_anonymous(
   zPw = captcha_decode((unsigned int)atoi(zCS));
   if( fossil_stricmp(zPw, zPassword)!=0 ) return 0;
   uid = db_int(0, "SELECT uid FROM user WHERE login='anonymous'"
-                  " AND length(pw)>0 AND length(cap)>0");
+                  " AND octet_length(pw)>0 AND octet_length(cap)>0");
   return uid;
 }
 
@@ -212,7 +227,7 @@ int login_search_uid(const char **pzUsername, const char *zPasswd){
   int uid = db_int(0,
     "SELECT uid FROM user"
     " WHERE login=%Q"
-    "   AND length(cap)>0 AND length(pw)>0"
+    "   AND octet_length(cap)>0 AND octet_length(pw)>0"
     "   AND login NOT IN ('anonymous','nobody','developer','reader')"
     "   AND (pw=%Q OR (length(pw)<>40 AND pw=%Q))"
     "   AND (info NOT LIKE '%%expires 20%%'"
@@ -585,7 +600,7 @@ void login_page(void){
   zPasswd = P("p");
   anonFlag = g.zLogin==0 && PB("anon");
   /* Handle log-out requests */
-  if( P("out") ){
+  if( P("out") && cgi_csrf_safe(2) ){
     login_clear_login_data();
     redirect_to_g();
     return;
@@ -600,6 +615,7 @@ void login_page(void){
   /* Deal with password-change requests */
   if( g.perm.Password && zPasswd
    && (zNew1 = P("n1"))!=0 && (zNew2 = P("n2"))!=0
+   && cgi_csrf_safe(2)
   ){
     /* If there is not a "real" login, we cannot change any password. */
     if( g.zLogin ){
@@ -1136,8 +1152,8 @@ static int login_transfer_credentials(
     zSQL = mprintf(
       "SELECT cexpire FROM user"
       " WHERE login=%Q"
-      "   AND length(cap)>0"
-      "   AND length(pw)>0"
+      "   AND octet_length(cap)>0"
+      "   AND octet_length(pw)>0"
       "   AND cexpire>julianday('now')"
       "   AND constant_time_cmp(cookie,%Q)=0",
       zLogin, zHash
@@ -1190,8 +1206,8 @@ static int login_find_user(
     "SELECT uid FROM user"
     " WHERE login=%Q"
     "   AND cexpire>julianday('now')"
-    "   AND length(cap)>0"
-    "   AND length(pw)>0"
+    "   AND octet_length(cap)>0"
+    "   AND octet_length(pw)>0"
     "   AND constant_time_cmp(cookie,%Q)=0",
     zLogin, zCookie
   );
@@ -1290,6 +1306,7 @@ void login_check_credentials(void){
    && db_get_int("localauth",0)==0
    && P("HTTPS")==0
   ){
+    char *zSeed;
     if( g.localOpen ) zLogin = db_lget("default-user",0);
     if( zLogin!=0 ){
       uid = db_int(0, "SELECT uid FROM user WHERE login=%Q", zLogin);
@@ -1300,7 +1317,10 @@ void login_check_credentials(void){
     zCap = "sxy";
     g.noPswd = 1;
     g.isHuman = 1;
-    sqlite3_snprintf(sizeof(g.zCsrfToken), g.zCsrfToken, "localhost");
+    zSeed = db_text("??", "SELECT uid||quote(login)||quote(pw)||quote(cookie)"
+                          "  FROM user WHERE uid=%d", uid);
+    login_create_csrf_secret(zSeed);
+    fossil_free(zSeed);
   }
 
   /* Check the login cookie to see if it matches a known valid user.
@@ -1337,8 +1357,8 @@ void login_check_credentials(void){
       if( fossil_strcmp(zHash, blob_str(&b))==0 ){
         uid = db_int(0,
             "SELECT uid FROM user WHERE login='anonymous'"
-            " AND length(cap)>0"
-            " AND length(pw)>0"
+            " AND octet_length(cap)>0"
+            " AND octet_length(pw)>0"
             " AND %.17g+0.25>julianday('now')",
             rTime
         );
@@ -1355,7 +1375,7 @@ void login_check_credentials(void){
         if( uid ) record_login_attempt(zUser, zIpAddr, 1);
       }
     }
-    sqlite3_snprintf(sizeof(g.zCsrfToken), g.zCsrfToken, "%.10s", zHash);
+    login_create_csrf_secret(zHash);
   }
 
   /* If no user found and the REMOTE_USER environment variable is set,
@@ -1365,7 +1385,8 @@ void login_check_credentials(void){
     const char *zRemoteUser = P("REMOTE_USER");
     if( zRemoteUser && db_get_boolean("remote_user_ok",0) ){
       uid = db_int(0, "SELECT uid FROM user WHERE login=%Q"
-                      " AND length(cap)>0 AND length(pw)>0", zRemoteUser);
+                      " AND octet_length(cap)>0 AND octet_length(pw)>0",
+                      zRemoteUser);
     }
   }
 
@@ -1404,7 +1425,7 @@ void login_check_credentials(void){
       uid = -1;
       zCap = "";
     }
-    sqlite3_snprintf(sizeof(g.zCsrfToken), g.zCsrfToken, "none");
+    login_create_csrf_secret("none");
   }
 
   login_set_uid(uid, zCap);
@@ -1807,22 +1828,6 @@ void login_insert_csrf_secret(void){
 }
 
 /*
-** Before using the results of a form, first call this routine to verify
-** that this Anti-CSRF token is present and is valid.  If the Anti-CSRF token
-** is missing or is incorrect, that indicates a cross-site scripting attack.
-** If the event of an attack is detected, an error message is generated and
-** all further processing is aborted.
-*/
-void login_verify_csrf_secret(void){
-  if( g.okCsrf ) return;
-  if( fossil_strcmp(P("csrf"), g.zCsrfToken)==0 ){
-    g.okCsrf = 1;
-    return;
-  }
-  fossil_fatal("Cross-site request forgery attempt");
-}
-
-/*
 ** Check to see if the candidate username zUserID is already used.
 ** Return 1 if it is already in use.  Return 0 if the name is 
 ** available for a self-registeration.
@@ -1964,6 +1969,7 @@ void register_page(void){
     return;
   }
   zPerms = db_get("default-perms", "u");
+  login_check_credentials();
 
   /* Prompt the user for email alerts if this repository is configured for
   ** email alerts and if the default permissions include "7" */
@@ -1979,7 +1985,7 @@ void register_page(void){
   zDName = PDT("dn","");
 
   /* Verify user imputs */
-  if( P("new")==0 || !cgi_csrf_safe(1) ){
+  if( P("new")==0 || !cgi_csrf_safe(2) ){
     /* This is not a valid form submission.  Fall through into
     ** the form display */
   }else if( (captchaIsCorrect = captcha_is_correct(1))==0 ){
@@ -1991,6 +1997,13 @@ void register_page(void){
   }else if( sqlite3_strglob("*[^-a-zA-Z0-9_.]*",zUserID)==0 ){
     iErrLine = 1;
     zErr = "User ID may not contain spaces or special characters.";
+  }else if( sqlite3_strlike("anonymous%", zUserID, 0)==0 
+         || sqlite3_strlike("nobody%", zUserID, 0)==0
+         || sqlite3_strlike("reader%", zUserID, 0)==0
+         || sqlite3_strlike("developer%", zUserID, 0)==0
+  ){
+    iErrLine = 1;
+    zErr = "This User ID is reserved. Choose something different.";
   }else if( zDName[0]==0 ){
     iErrLine = 2;
     zErr = "Required";
@@ -2253,6 +2266,10 @@ void login_reqpwreset_page(void){
   if( !cgi_csrf_safe(1) || P("reqpwreset")==0 ){
     /* This is the initial display of the form.  No processing or error
     ** checking is to be done. Fall through into the form display
+    **
+    ** cgi_csrf_safe():  Nothing interesting happens on this page without
+    ** a valid captcha solution, so we only need to check referrer and that
+    ** the request is a POST.
     */
   }else if( (captchaIsCorrect = captcha_is_correct(1))==0 ){
     iErrLine = 2;

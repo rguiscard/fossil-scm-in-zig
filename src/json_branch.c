@@ -130,7 +130,7 @@ static cson_value * json_branch_list(void){
   }
 
 
-  branch_prepare_list_query(&q, branchListFlags, 0, 0);
+  branch_prepare_list_query(&q, branchListFlags, 0, 0, 0); /* Allow a user? */
   cson_object_set(pay,"branches",listV);
   while((SQLITE_ROW==db_step(&q))){
     cson_value * v = cson_sqlite3_column_to_value(q.pStmt,0);
@@ -295,7 +295,7 @@ static int json_branch_new(BranchCreateOptions * zOpt,
   if( brid==0 ){
     fossil_panic("Problem committing manifest: %s", g.zErrMsg);
   }
-  db_multi_exec("INSERT OR IGNORE INTO unsent VALUES(%d)", brid);
+  db_add_unsent(brid);
   if( manifest_crosslink(brid, &branch, MC_PERMIT_HOOKS)==0 ){
     fossil_panic("%s", g.zErrMsg);
   }

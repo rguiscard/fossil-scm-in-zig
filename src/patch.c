@@ -695,16 +695,17 @@ static FILE *patch_remote_command(
     blob_appendf(&cmd, " -T");
     blob_append_escaped_arg(&cmd, zRemote, 0);
     blob_init(&remote, 0, 0);
-    if( zFossilCmd==0 ) zFossilCmd = "fossil";
+    if( zFossilCmd==0 ){
+      blob_append_escaped_arg(&cmd, "PATH=$HOME/bin:$PATH", 0);
+      zFossilCmd = "fossil";
+    }
     blob_appendf(&remote, "%$ patch %s%s --dir64 %z -", 
                  zFossilCmd, zRemoteCmd, zForce, encode64(zDir, -1));
     blob_append_escaped_arg(&cmd, blob_str(&remote), 0);
     blob_reset(&remote);
   }
-  if( mFlags & PATCH_VERBOSE ){
-    fossil_print("# %s\n", blob_str(&cmd));
-    fflush(stdout);
-  }
+  fossil_print("%s\n", blob_str(&cmd));
+  fflush(stdout);
   f = popen(blob_str(&cmd), zRW);
   if( f==0 ){
     fossil_fatal("cannot run command: %s", blob_str(&cmd));
@@ -840,19 +841,19 @@ static void patch_diff(
 ** uncommitted changes of a check-out.  Use Fossil binary patches to transfer
 ** proposed or incomplete changes between machines for testing or analysis.
 **
-** > fossil patch create [DIRECTORY] FILENAME
+** > fossil patch create [DIRECTORY] PATCHFILE
 **
-**       Create a new binary patch in FILENAME that captures all uncommitted
+**       Create a new binary patch in PATCHFILE that captures all uncommitted
 **       changes in the check-out at DIRECTORY, or the current directory if
-**       DIRECTORY is omitted.  If FILENAME is "-" then the binary patch
+**       DIRECTORY is omitted.  If PATCHFILE is "-" then the binary patch
 **       is written to standard output.
 **
 **       Options:
 **           -f|--force     Overwrite an existing patch with the same name
 **
-** > fossil patch apply [DIRECTORY] FILENAME
+** > fossil patch apply [DIRECTORY] PATCHFILE
 **
-**       Apply the changes in FILENAME to the check-out at DIRECTORY, or
+**       Apply the changes in PATCHFILE to the check-out at DIRECTORY, or
 **       in the current directory if DIRECTORY is omitted.
 **
 **       Options:
@@ -862,10 +863,12 @@ static void patch_diff(
 **           -n|--dry-run   Do nothing, but print what would have happened
 **           -v|--verbose   Extra output explaining what happens
 **
-** > fossil patch diff [DIRECTORY] FILENAME
-** > fossil patch gdiff [DIRECTORY] FILENAME
+** > fossil patch diff [DIRECTORY] PATCHFILE
+** > fossil patch gdiff [DIRECTORY] PATCHFILE
 **
-**       Show a human-readable diff for the patch.  All the usual
+**       Show a human-readable diff for the patch in PATCHFILE and associated
+**       with the repository checked out in DIRECTORY.  The current
+**       directory is used if DIRECTORY is omitted. All the usual
 **       diff flags described at "fossil help diff" apply. With gdiff,
 **       gdiff-command is used instead of internal diff logic.  In addition:
 **
@@ -883,6 +886,12 @@ static void patch_diff(
 **           *   HOST:DIRECTORY
 **           *   USER@HOST:DIRECTORY
 **
+**       The name of the fossil executable on the remote host is specified
+**       by the --fossilcmd option, or if there is no --fossilcmd, it first
+**       tries "$HOME/bin/fossil" and if not found there it searches for any
+**       executable named "fossil" on the default $PATH set by SSH on the
+**       remote.
+**
 **       Command-line options:
 **
 **           -f|--force         Apply the patch even though there are unsaved
@@ -899,9 +908,9 @@ static void patch_diff(
 **       Like "fossil patch push" except that the transfer is from remote
 **       to local.  All the same command-line options apply.
 **
-** > fossil patch view FILENAME
+** > fossil patch view PATCHFILE
 **
-**       View a summary of the changes in the binary patch FILENAME.
+**       View a summary of the changes in the binary patch in PATCHFILE.
 **       Use "fossil patch diff" for detailed patch content.
 **
 **           -v|--verbose       Show extra detail about the patch

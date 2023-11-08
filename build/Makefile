@@ -9,6 +9,7 @@
 #    the following to point from the build directory to the src/ folder.
 #
 SRCDIR = ../src
+TOPDIR = ..
 #### Upstream source files included directly in this repository.
 #
 SRCDIR_extsrc = ../extsrc
@@ -30,14 +31,14 @@ OBJDIR = bld
 #    to compile code-generator programs as part of the build process.
 #    See TCC below for the C compiler for building the finished binary.
 #
-BCC = zig cc
+BCC = cc
 
 #### The suffix to add to final executable file.  When cross-compiling
 #    to windows, make this ".exe".  Otherwise leave it blank.
 #
 E = 
 
-TCC = zig cc
+TCC = cc
 
 #### Tcl shell for use in running the fossil testsuite.  If you do not
 #    care about testing the end result, this can be blank.
@@ -86,6 +87,10 @@ EMSDK_ENV =
 EMCC_OPT = -Oz
 EMCC_WRAPPER = $(SRCDIR_tools)/emcc.sh
 
+# MAKE_COMPILATION_DB (yes/no) determines whether or not the
+# compile_commands.json file will be generated.
+MAKE_COMPILATION_DB = no
+
 .PHONY: all tags
 
 include $(SRCDIR)/main.mk
@@ -120,9 +125,9 @@ Makefile: ../Makefile.in $(SRCDIR)/main.mk /home/rguiscard/fossil-scm-in-zig/aut
 	touch /home/rguiscard/fossil-scm-in-zig/build/Makefile
 
 # Container stuff
-SRCTB := src-66ee0beb9b47.tar.gz
-IMGVER := fossil:66ee0beb9b47
-CNTVER := fossil-66ee0beb9b47
+SRCTB := src-47362306a7dd.tar.gz
+IMGVER := fossil:47362306a7dd
+CNTVER := fossil-47362306a7dd
 CENGINE := docker
 container:
 	$(CENGINE) image inspect $(IMGVER) > /dev/null 2>&1 || \
@@ -148,7 +153,7 @@ container-clean:
 	-$(CENGINE) image     rm   $(IMGVER)
 
 container-image:
-	$(APPNAME) tarball --name src 66ee0beb9b47 $(SRCTB)
+	$(APPNAME) tarball --name src 47362306a7dd $(SRCTB)
 	$(CENGINE) buildx build \
 		--load \
 		--tag $(IMGVER) \

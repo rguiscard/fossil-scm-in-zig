@@ -452,7 +452,8 @@ void www_print_timeline(
         db_reset(&qcherrypick);
       }
       gidx = graph_add_row(pGraph, rid, nParent, nCherrypick, aParent,
-                           zBr, zBgClr, zUuid, isLeaf);
+                           zBr, zBgClr, zUuid,
+                           isLeaf ? isLeaf + 2 * has_closed_tag(rid) : 0);
       db_reset(&qbranch);
       @ <div id="m%d(gidx)" class="tl-nodemark"></div>
     }else if( zType[0]=='e' && pGraph && zBgClr && zBgClr[0] ){
@@ -943,7 +944,7 @@ void timeline_output_graph_javascript(
     **        node with the id equal to the value.  This is like "u" except
     **        that the line is dotted instead of solid and has no arrow.
     **        Mnemonic: "Same Branch".
-    **    f:  0x01: a leaf node.
+    **    f:  0x01: a leaf node, 0x02: a closed leaf node.
     **   au:  An array of integers that define thick-line risers for branches.
     **        The integers are in pairs.  For each pair, the first integer is
     **        is the rail on which the riser should run and the second integer
@@ -983,6 +984,7 @@ void timeline_output_graph_javascript(
       }
       k = 0;
       if( pRow->isLeaf ) k |= 1;
+      if( pRow->isLeaf & 2) k |= 2;
       cgi_printf("\"f\":%d,",k);
       for(i=k=0; i<GR_MAX_RAIL; i++){
         if( i==pRow->iRail ) continue;
@@ -1834,7 +1836,7 @@ void page_timeline(void){
   /* Convert r=TAG to t=TAG&rel in order to populate the UI style widgets. */
   if( zBrName && !related ){
     cgi_delete_query_parameter("r");
-    cgi_set_query_parameter("t", zBrName);
+    cgi_set_query_parameter("t", zBrName);  (void)P("t");
     cgi_set_query_parameter("rel", "1");
     zTagName = zBrName;
     related = 1;
@@ -2285,7 +2287,7 @@ void page_timeline(void){
     }
     if( cpOnly && showCherrypicks ){
       db_multi_exec(
-        "CREATE TABLE IF NOT EXISTS cpnodes(rid INTEGER PRIMARY KEY);"
+        "CREATE TEMP TABLE IF NOT EXISTS cpnodes(rid INTEGER PRIMARY KEY);"
         "INSERT OR IGNORE INTO cpnodes SELECT childid FROM cherrypick;"
         "INSERT OR IGNORE INTO cpnodes SELECT parentid FROM cherrypick;"
       );
@@ -2837,6 +2839,7 @@ void page_timeline(void){
     @ %z(chref("button","%s",zNewerButton))%h(zNewerButtonLabel)\
     @ &nbsp;&uarr;</a>
   }
+  cgi_check_for_malice();
   www_print_timeline(&q, tmFlags, zThisUser, zThisTag, zBrName,
                      selectedRid, secondaryRid, 0);
   db_finalize(&q);
@@ -3116,6 +3119,11 @@ void print_timeline(Stmt *q, int nLimit, int width, const char *zFormat, int ver
       }
       db_reset(&fchngQuery);
     }
+    /* With special formatting (except for "oneline") and --verbose,
+    ** print a newline after the file listing */
+    if( zFormat!=0 && (fossil_strcmp(zFormat, "%h %c")!=0) ){
+      fossil_print("\n");
+    }
     nEntry++; /* record another complete entry */
   }
   if( rc==SQLITE_DONE ){
@@ -3303,10 +3311,10 @@ void timeline_cmd(void){
   if( find_option("oneline",0,0)!= 0 || fossil_strcmp(zFormat,"oneline")==0 )
     zFormat = "%h %c";
   if( find_option("medium",0,0)!= 0 || fossil_strcmp(zFormat,"medium")==0 )
-    zFormat = "Commit:   %h%nDate:     %d%nAuthor:   %a%nComment:  %c%n";
+    zFormat = "Commit:   %h%nDate:     %d%nAuthor:   %a%nComment:  %c";
   if( find_option("full",0,0)!= 0 || fossil_strcmp(zFormat,"full")==0 )
     zFormat = "Commit:   %H%nDate:     %d%nAuthor:   %a%nComment:  %c%n"
-              "Branch:   %b%nTags:     %t%nPhase:    %p%n";
+              "Branch:   %b%nTags:     %t%nPhase:    %p";
   showSql = find_option("sql",0,0)!=0;
 
   if( !zLimit ){

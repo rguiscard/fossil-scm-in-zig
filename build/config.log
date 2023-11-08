@@ -1,7 +1,7 @@
 Invoked as: ../configure --json --with-th1-docs --with-sqlite=tree
 Tclsh: /usr/bin/tclsh
 Failed: cc -g -O2 conftest__.c -o conftest__
-/usr/bin/ld: /tmp/ccIMKVTn.o: in function `main':
+/usr/bin/ld: /tmp/ccppr9DJ.o: in function `main':
 /home/rguiscard/fossil-scm-in-zig/build/conftest__.c:3: undefined reference to `inflateEnd'
 collect2: error: ld returned 1 exit status
 child process exited abnormally
@@ -29,7 +29,7 @@ return 0;
 }
 ============
 Failed: cc -g -O2 conftest__.c -o conftest__ -lssl -lcrypto -lz
-/usr/bin/ld: /tmp/ccGfny7s.o: in function `main':
+/usr/bin/ld: /tmp/ccdRHt9L.o: in function `main':
 /home/rguiscard/fossil-scm-in-zig/build/conftest__.c:3: undefined reference to `dn_expand'
 collect2: error: ld returned 1 exit status
 child process exited abnormally
@@ -42,7 +42,7 @@ return 0;
 }
 ============
 Failed: cc -g -O2 conftest__.c -o conftest__ -lresolv -lssl -lcrypto -lz
-/usr/bin/ld: /tmp/ccybZZ9Q.o: in function `main':
+/usr/bin/ld: /tmp/ccn0h27a.o: in function `main':
 /home/rguiscard/fossil-scm-in-zig/build/conftest__.c:3: undefined reference to `dn_expand'
 collect2: error: ld returned 1 exit status
 child process exited abnormally
@@ -55,7 +55,7 @@ return 0;
 }
 ============
 Failed: cc -g -O2 conftest__.c -o conftest__ -lssl -lcrypto -lz
-/usr/bin/ld: /tmp/ccLWDbYb.o: in function `main':
+/usr/bin/ld: /tmp/ccIXxbUz.o: in function `main':
 /home/rguiscard/fossil-scm-in-zig/build/conftest__.c:3: undefined reference to `ns_name_uncompress'
 collect2: error: ld returned 1 exit status
 child process exited abnormally
@@ -80,7 +80,7 @@ return 0;
 }
 ============
 Failed: cc -g -O2 conftest__.c -o conftest__ -lresolv -lssl -lcrypto -lz
-/usr/bin/ld: /tmp/ccEzNbGK.o: in function `main':
+/usr/bin/ld: /tmp/ccH5d2J3.o: in function `main':
 /home/rguiscard/fossil-scm-in-zig/build/conftest__.c:3: undefined reference to `res_query'
 collect2: error: ld returned 1 exit status
 child process exited abnormally
@@ -105,7 +105,7 @@ return 0;
 }
 ============
 Failed: cc -g -O2 conftest__.c -o conftest__ -lresolv -lresolv -lssl -lcrypto -lz
-/usr/bin/ld: /tmp/ccy2qNZv.o: in function `main':
+/usr/bin/ld: /tmp/cciQvIlR.o: in function `main':
 /home/rguiscard/fossil-scm-in-zig/build/conftest__.c:3: undefined reference to `res_query'
 collect2: error: ld returned 1 exit status
 child process exited abnormally
@@ -118,7 +118,7 @@ return 0;
 }
 ============
 Failed: cc -g -O2 conftest__.c -o conftest__ -lresolv -lssl -lcrypto -lz
-/usr/bin/ld: /tmp/cco2qGVd.o: in function `main':
+/usr/bin/ld: /tmp/ccRvDGUB.o: in function `main':
 /home/rguiscard/fossil-scm-in-zig/build/conftest__.c:3: undefined reference to `res_9_ns_initparse'
 collect2: error: ld returned 1 exit status
 child process exited abnormally
@@ -131,7 +131,7 @@ return 0;
 }
 ============
 Failed: cc -g -O2 conftest__.c -o conftest__ -lresolv -lresolv -lssl -lcrypto -lz
-/usr/bin/ld: /tmp/cckHFK2B.o: in function `main':
+/usr/bin/ld: /tmp/ccFsJ5uZ.o: in function `main':
 /home/rguiscard/fossil-scm-in-zig/build/conftest__.c:3: undefined reference to `res_9_ns_initparse'
 collect2: error: ld returned 1 exit status
 child process exited abnormally
@@ -144,7 +144,7 @@ return 0;
 }
 ============
 Failed: cc -g -O2 conftest__.c -o conftest__ -lresolv -lssl -lcrypto -lz
-/usr/bin/ld: /tmp/cccDnJS6.o: in function `main':
+/usr/bin/ld: /tmp/cczUqUku.o: in function `main':
 /home/rguiscard/fossil-scm-in-zig/build/conftest__.c:3: undefined reference to `pledge'
 collect2: error: ld returned 1 exit status
 child process exited abnormally
@@ -157,7 +157,7 @@ return 0;
 }
 ============
 Failed: cc -g -O2 conftest__.c -o conftest__ -lresolv -lssl -lcrypto -lz
-/usr/bin/ld: /tmp/ccKcQdSP.o: in function `main':
+/usr/bin/ld: /tmp/cc8D5f5c.o: in function `main':
 /home/rguiscard/fossil-scm-in-zig/build/conftest__.c:3: undefined reference to `getpassphrase'
 collect2: error: ld returned 1 exit status
 child process exited abnormally
@@ -176,7 +176,7 @@ conftest__.c:1:13: warning: conflicting types for built-in function ‘sin’; e
 conftest__.c:1:1: note: ‘sin’ is declared in header ‘<math.h>’
   +++ |+#include <math.h>
     1 | extern void sin(void);
-/usr/bin/ld: /tmp/ccxUo8XE.o: in function `main':
+/usr/bin/ld: /tmp/ccJIq5CW.o: in function `main':
 /home/rguiscard/fossil-scm-in-zig/build/conftest__.c:3: undefined reference to `sin'
 collect2: error: ld returned 1 exit status
 child process exited abnormally
@@ -189,7 +189,7 @@ return 0;
 }
 ============
 Failed: cc -g -O2 conftest__.c -o conftest__ -lm -lresolv -lssl -lcrypto -lz
-/usr/bin/ld: /tmp/ccFxUJ8m.o: in function `main':
+/usr/bin/ld: /tmp/ccontCNI.o: in function `main':
 /home/rguiscard/fossil-scm-in-zig/build/conftest__.c:3: undefined reference to `fuse_mount'
 collect2: error: ld returned 1 exit status
 child process exited abnormally
@@ -214,7 +214,7 @@ return 0;
 }
 ============
 Failed: cc -g -O2 conftest__.c -o conftest__ -lm -lresolv -lssl -lcrypto -lz
-/usr/bin/ld: /tmp/ccH2uBY6.o: in function `main':
+/usr/bin/ld: /tmp/ccJT3oIt.o: in function `main':
 /home/rguiscard/fossil-scm-in-zig/build/conftest__.c:3: undefined reference to `dlopen'
 collect2: error: ld returned 1 exit status
 child process exited abnormally

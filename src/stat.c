@@ -76,6 +76,7 @@ void stats_for_email(void){
     sqlite3_stmt *pStmt;
     int rc;
     @ Queued to database "%h(zDb)"
+    g.dbIgnoreErrors++;
     rc = sqlite3_open(zDb, &db);
     if( rc==SQLITE_OK ){
       rc = sqlite3_prepare_v2(db, "SELECT count(*) FROM email",-1,&pStmt,0);
@@ -84,6 +85,10 @@ void stats_for_email(void){
         @ %,d(file_size(zDb,ExtFILE)) bytes)
       }
       sqlite3_finalize(pStmt);
+    }
+    g.dbIgnoreErrors--;
+    if( rc ){
+      @ &larr; cannot access database!
     }
     sqlite3_close(db);
   }else
@@ -116,7 +121,7 @@ void stats_for_email(void){
   nSub = db_int(0, "SELECT count(*) FROM subscriber");
   iCutoff = db_get_int("email-renew-cutoff",0);
   nASub = db_int(0, "SELECT count(*) FROM subscriber WHERE sverified"
-                   " AND NOT sdonotcall AND length(ssub)>1"
+                   " AND NOT sdonotcall AND octet_length(ssub)>1"
                    " AND lastContact>=%d;", iCutoff);
   @ %,d(nASub) active, %,d(nSub) total
   @ </td></tr>
@@ -143,6 +148,8 @@ void stat_page(void){
   int szMax, szAvg;
   int brief;
   const char *p;
+  char *z;
+  int Y, M, D;
 
   login_check_credentials();
   if( !g.perm.Read ){ login_needed(g.anon.Read); return; }
@@ -204,7 +211,7 @@ void stat_page(void){
       Stmt q;
       char zStored[100];
       db_prepare(&q,
-        "SELECT count(*), sum(sz), sum(length(content))"
+        "SELECT count(*), sum(sz), sum(octet_length(content))"
         "  FROM unversioned"
         " WHERE length(hash)>1"
       );
@@ -238,8 +245,8 @@ void stat_page(void){
       char zSz[100];
       n = db_int(0, "SELECT max(msgid) FROM chat");
       m = db_int(0, "SELECT count(*) FROM chat WHERE mdel IS NOT TRUE");
-      sz = db_int64(0, "SELECT sum(coalesce(length(xmsg),0)+"
-                                  "coalesce(length(file),0)) FROM chat");
+      sz = db_int64(0, "SELECT sum(coalesce(octet_length(xmsg),0)+"
+                                  "coalesce(octet_length(file),0)) FROM chat");
       approxSizeName(sizeof(zSz), zSz, sz);
       @ <tr><th>Number&nbsp;Of&nbsp;Chat&nbsp;Messages:</th>
       @ <td>%,d(n) (%,d(m) still alive, %s(zSz) in size)</td></tr>
@@ -259,10 +266,16 @@ void stat_page(void){
       }
     }
   }
-  @ <tr><th>Duration&nbsp;Of&nbsp;Project:</th><td>
-  n = db_int(0, "SELECT julianday('now') - (SELECT min(mtime) FROM event)"
-                " + 0.99");
-  @ %,d(n) days or approximately %.2f(n/365.2425) years.
+  @ <tr><th>Project&nbsp;Age:</th><td>
+  z = db_text(0, "SELECT timediff('now',(SELECT min(mtime) FROM event));");
+  sscanf(z, "+%d-%d-%d", &Y, &M, &D);
+  if( Y>0 ){
+    @ %d(Y) years, \
+  }
+  if( M>0 ){
+    @ %d(M) months, \
+  }
+  @ %d(D) days
   @ </td></tr>
   p = db_get("project-code", 0);
   if( p ){
@@ -796,6 +809,7 @@ void repo_tabsize_page(void){
 
   login_check_credentials();
   if( !g.perm.Read ){ login_needed(g.anon.Read); return; }
+  cgi_check_for_malice();
   style_set_current_feature("stat");
   style_header("Repository Table Sizes");
   style_adunit_config(ADUNIT_RIGHT_OK);
@@ -874,7 +888,7 @@ void gather_artifact_stats(int bWithTypes){
     @ INSERT INTO artstat(id,atype,isDelta,szExp,szCmpr)
     @    SELECT blob.rid, NULL,
     @           delta.rid IS NOT NULL,
-    @           size, length(content)
+    @           size, octet_length(content)
     @      FROM blob LEFT JOIN delta ON blob.rid=delta.rid
     @     WHERE content IS NOT NULL;
   ;
@@ -972,6 +986,7 @@ void artifact_stats_page(void){
     login_needed(g.anon.Write);
     return;
   }
+  cgi_check_for_malice();
   fossil_nice_default();
 
   style_set_current_feature("stat");

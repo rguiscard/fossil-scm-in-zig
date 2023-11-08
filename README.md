@@ -24,7 +24,7 @@ Inside Fossil SCM source code (e.g. `fossil-src-2.22/`), run `mkdir build; cd bu
 
 Created `Makefile` includes two variables: `BCC` and `TCC`. They are set to use `cc`. Run `make` to make sure fossil can be compiled with necessary libraries in the platform.
 
-The compiled binary will be located in the same directory of Makefile, under `build` directory created above. All artifacts (.h, .o, etc.) will located under `build/bld` subdirectory by default.
+The compiled binary will be located in the same directory of Makefile, under `build` directory created above. All artifacts (.h, .o, etc.) will locate under `build/bld` subdirectory by default.
 
 ### Build with zig cc ###
 
@@ -63,7 +63,7 @@ Details about the Zig build system will not be explained here, just to show a wo
 
 ### Build tools ###
 
-There are tools under `tools` directory to be built first in order to process source code, namely `translate`, `mkindex`, `mkbuiltin`, `makeheaders`, `mkversion`, `codecheck1`. Let's build `tralsnate` first. Create a `build.zig` like this:
+There are tools under `tools` directory to be built first in order to process source code, namely `translate`, `mkindex`, `mkbuiltin`, `makeheaders`, `mkversion`, `codecheck1`. Let's build `translate` first. Create a `build.zig` like this:
 
 ```
 const std = @import("std");
@@ -588,6 +588,7 @@ There is no plan for next steps. Fossil SCM provides ways to create [new feature
 
 ## Change log ##
 
+- 2023-11-08 import Fossil 2.23
 - 2023-11-06 import Fossil 2.22
 - 2023-11-06 repository created
 

@@ -261,6 +261,7 @@ void form_begin(const char *zOtherArgs, const char *zAction, ...){
     @ <form method="POST" data-action='%s(zLink)' action='%R/login' \
     @ %s(zOtherArgs)>
   }
+  login_insert_csrf_secret();
 }
 
 /*
@@ -609,8 +610,8 @@ char *style_csp(int toHeader){
   char *zCsp;
   int i;
   if( disableCSP ) return fossil_strdup("");
-  zFormat = db_get("default-csp","");
-  if( zFormat[0]==0 ){
+  zFormat = db_get("default-csp",0);
+  if( zFormat==0 ){
     zFormat = zBackupCSP;
   }
   blob_init(&csp, 0, 0);
@@ -732,7 +733,7 @@ void style_set_current_feature(const char* zFeature){
 ** setting, or style_default_mainmenu(), in that order, returning the
 ** first of those which is defined.
 */
-const char*style_get_mainmenu(){
+const char *style_get_mainmenu(){
   static const char *zMenu = 0;
   if(!zMenu){
     if(g.zMainMenuFile){
@@ -796,7 +797,7 @@ static void style_init_th1_vars(const char *zTitle){
   if( g.ftntsIssues[0] || g.ftntsIssues[1] ||
       g.ftntsIssues[2] || g.ftntsIssues[3] ){
     char buf[80];
-    sprintf(&buf[0],"%i %i %i %i",g.ftntsIssues[0],g.ftntsIssues[1],
+    sqlite3_snprintf(sizeof(buf),buf,"%i %i %i %i",g.ftntsIssues[0],g.ftntsIssues[1],
                                   g.ftntsIssues[2],g.ftntsIssues[3]);
     Th_Store("footnotes_issues_counters", buf);
   }
@@ -836,7 +837,7 @@ void style_header(const char *zTitleFormat, ...){
   sideboxUsed = 0;
   if( g.perm.Debug && P("showqp") ){
     @ <div class="debug">
-    cgi_print_all(0, 0);
+    cgi_print_all(0, 0, 0);
     @ </div>
   }
 }
@@ -1461,7 +1462,26 @@ void webpage_error(const char *zFormat, ...){
 #ifndef _WIN32
     @ RSS = %.2f(fossil_rss()/1000000.0) MB</br>
 #endif
-    @ cgi_csrf_safe(0) = %d(cgi_csrf_safe(0))<br>
+    (void)cgi_csrf_safe(2);
+    switch( g.okCsrf ){
+      case 1: {
+         @ CSRF safety = Same origin<br>
+         break;
+      }
+      case 2: {
+         @ CSRF safety = Same origin, POST<br>
+         break;
+      }
+      case 3: {
+         @ CSRF safety = Same origin, POST, CSRF token<br>
+         break;
+      }
+      default: {
+         @ CSRF safety = unsafe<br>
+         break;
+      }
+    }
+    
     @ fossil_exe_id() = %h(fossil_exe_id())<br>
     if( g.perm.Admin ){
       int k;
@@ -1476,7 +1496,7 @@ void webpage_error(const char *zFormat, ...){
     @ <hr>
     P("HTTP_USER_AGENT");
     P("SERVER_SOFTWARE");
-    cgi_print_all(showAll, 0);
+    cgi_print_all(showAll, 0, 0);
     if( showAll && blob_size(&g.httpHeader)>0 ){
       @ <hr>
       @ <pre>

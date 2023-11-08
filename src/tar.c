@@ -609,7 +609,7 @@ void tarball_of_checkin(
 ** actually generated.  This feature can be used in combination with
 ** the --list option to get a list of the filenames that would be in the
 ** tarball had it actually been generated.  Note that --list shows only
-** filenames.  "tar tzf" shows both filesnames and subdirectory names.
+** filenames.  "tar tzf" shows both filenames and subdirectory names.
 **
 ** Options:
 **   -X|--exclude GLOBLIST   Comma-separated list of GLOBs of files to exclude
@@ -833,6 +833,7 @@ void tarball_page(void){
     style_finish_page();
     return;
   }
+  cgi_check_for_malice();
   blob_zero(&tarball);
   if( cache_read(&tarball, zKey)==0 ){
     tarball_of_checkin(rid, &tarball, zName, pInclude, pExclude, 0);

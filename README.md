@@ -370,14 +370,14 @@ It is now quite straight forward to build and run these tools.
 
 ### Preprocess: makeheaders ###
 
-[makeheaders](https://fossil-scm.org/home/doc/trunk/tools/makeheaders.html) works slightly different. It takes `addArg` instead of `addFileArg`. And for some reasons, it only works with `ReleaseFast` or `ReleaseSmall` mode.
+[makeheaders](https://fossil-scm.org/home/doc/trunk/tools/makeheaders.html) works slightly different. It takes `addArg` instead of `addFileArg`. `makeheaders` has undefined behaviors in C, therefore, an extra `disable_sanitize_c` flag is set to be true.
 
 ```
     const makeheaders_exe = b.addExecutable(.{
         .name = "makeheaders",
         .root_source_file = null,
         .target = target,
-        .optimize = std.builtin.Mode.ReleaseFast, // only work for ReleaseSmall and ReleaseFast; otherwise it will failed
+        .optimize = optimize,
     });
 
     makeheaders_exe.addCSourceFile(.{
@@ -386,6 +386,7 @@ It is now quite straight forward to build and run these tools.
         },
         .flags = &[_][]const u8 {}
     });
+    makeheaders_exe.disable_sanitize_c = true;
     makeheaders_exe.linkLibC();
 
     // makeheaders step to preprocess source code

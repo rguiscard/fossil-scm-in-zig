@@ -474,7 +474,7 @@ pub fn build(b: *std.Build) void {
         .name = "makeheaders",
         .root_source_file = null,
         .target = target,
-        .optimize = std.builtin.Mode.ReleaseFast, // only work for ReleaseSmall and ReleaseFast; otherwise it will failed
+        .optimize = optimize,
     });
 
     makeheaders_exe.addCSourceFile(.{
@@ -483,6 +483,7 @@ pub fn build(b: *std.Build) void {
         },
         .flags = &[_][]const u8 {}
     });
+    makeheaders_exe.disable_sanitize_c = true;
     makeheaders_exe.linkLibC();
 
     const makeheaders = b.addRunArtifact(makeheaders_exe);
@@ -553,6 +554,8 @@ pub fn build(b: *std.Build) void {
             .flags = &cflags,
         });
     }
+
+    fossil_exe.disable_sanitize_c = true;
 
     fossil_exe.linkLibC();
     fossil_exe.linkSystemLibrary("m");

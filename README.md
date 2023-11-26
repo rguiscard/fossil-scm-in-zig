@@ -16,6 +16,10 @@ Original Fossil SCM can be compiled with typical `configure; make;` steps. Inter
 
 Inside Fossil SCM source code (e.g. `fossil-src-2.22/`), run `mkdir build; cd build;`
 
+### Prerequisite ###
+
+It is better to have ssl support. For debian-based system, run `apt-get install libssl-dev`.
+
 ### Configuration ###
 
 `../configure --json --with-th1-docs --with-sqlite=tree`

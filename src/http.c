@@ -302,6 +302,8 @@ int http_exchange(
   int isError = 0;      /* True if the reply is an error message */
   int isCompressed = 1; /* True if the reply is compressed */
 
+  fprintf(stdout, "http_exchange\n");
+
   if( g.zHttpCmd!=0 ){
     /* Handle the --transport-command option for "fossil sync" and similar */
     return http_exchange_external(pSend,pReply,mHttpFlags,zAltMimetype);

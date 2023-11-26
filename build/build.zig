@@ -264,10 +264,11 @@ const builtin_files = [_][]const u8{
 const cflags = [_][]const u8{
     "-Wall",
     "-Wdeclaration-after-statement",
-    "-DFOSSIL_ENABLE_JSON",
-    "-DFOSSIL_ENABLE_TH1_DOCS",
+//    "-DFOSSIL_ENABLE_JSON",
+//    "-DFOSSIL_ENABLE_TH1_DOCS",
     "-DFOSSIL_DYNAMIC_BUILD=1",
     "-DHAVE_AUTOCONFIG_H",
+    "-fno-sanitize=undefined",
 };
 
 const sqlite_options = [_][]const u8{

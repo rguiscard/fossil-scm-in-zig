@@ -206,6 +206,7 @@ void cgi_reset_content(void){
 ** Return a pointer to Blob that is currently accumulating reply content.
 */
 Blob *cgi_output_blob(void){
+  fprintf(stdout, "cgi_output_blog\n");
   return pContent;
 }
 
@@ -213,6 +214,7 @@ Blob *cgi_output_blob(void){
 ** Return the content header as a text string
 */
 const char *cgi_header(void){
+  fprintf(stdout, "cgi_header\n");
   return blob_str(&cgiContent[0]);
 }
 
@@ -222,6 +224,7 @@ const char *cgi_header(void){
 ** content.
 */
 static void cgi_combine_header_and_body(void){
+  fprintf(stdout, "cgi_combine\n");
   int size = blob_size(&cgiContent[1]);
   if( size>0 ){
     blob_append(&cgiContent[0], blob_buffer(&cgiContent[1]), size);
@@ -286,6 +289,7 @@ void cgi_append_header(const char *zLine){
   blob_append(&extraHeader, zLine, -1);
 }
 void cgi_printf_header(const char *zLine, ...){
+  fprintf(stdout, "cgi_printf\n");
   va_list ap;
   va_start(ap, zLine);
   blob_vappendf(&extraHeader, zLine, ap);
@@ -2531,16 +2535,26 @@ int cgi_http_server(
     FD_ZERO(&readfds);
     assert( listener>=0 );
     FD_SET( listener, &readfds);
-    select( listener+1, &readfds, 0, 0, &delay);
+    fprintf(stdout, "before %d\n", listener);
+    int rc = select( listener+1, &readfds, 0, 0, &delay);
+    fprintf(stdout, "rc %d\n", rc);
+    if (rc < 0) {
+       fprintf(stdout, "rc %d\n", rc);
+    }
+    fprintf(stdout, "after\n");
     if( FD_ISSET(listener, &readfds) ){
+      fprintf(stdout, "Yes\n");
       lenaddr = sizeof(inaddr);
       connection = accept(listener, (struct sockaddr*)&inaddr, &lenaddr);
+      fprintf(stdout, "Yes %d\n", connection);
       if( connection>=0 ){
         if( flags & HTTP_SERVER_NOFORK ){
           child = 0;
         }else{
+          fprintf(stdout, "fork\n");
           child = fork();
         }
+        fprintf(stdout, "child %d\n", child);
         if( child!=0 ){
           if( child>0 ){
             nchildren++;
@@ -2549,10 +2563,15 @@ int cgi_http_server(
           close(connection);
         }else{
           int nErr = 0, fd;
+          fprintf(stdout, "nErr %d\n", nErr);
           close(0);
+          fprintf(stdout, "close 0 %d\n", nErr);
           fd = dup(connection);
+          fprintf(stdout, "dup connection %d\n", nErr);
           if( fd!=0 ) nErr++;
-          close(1);
+          fprintf(stdout, "before close 1 %d\n", nErr);
+//          close(1);
+          fprintf(stdout, "second nErr %d\n", nErr);
           fd = dup(connection);
           if( fd!=1 ) nErr++;
           if( 0 && !g.fAnyTrace ){
@@ -2563,12 +2582,15 @@ int cgi_http_server(
           close(connection);
           g.nPendingRequest = nchildren+1;
           g.nRequest = nRequest+1;
-          return nErr;
+          fprintf(stdout, "nErr %d\n", nErr);
+//          return nErr;
+          return 0;
         }
       }
     }
     /* Bury dead children */
     if( nchildren ){
+      fprintf(stdout, "burry dead child\n");
       while(1){
         int iStatus = 0;
         pid_t x = waitpid(-1, &iStatus, WNOHANG);

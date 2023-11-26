@@ -590,6 +590,7 @@ void mimetype_list_page(void){
 ** of the document.
 */
 int doc_is_embedded_html(Blob *pContent, Blob *pTitle){
+  fprintf(stdout, "doc_is_embedded_html\n");
   const char *zIn = blob_str(pContent);
   const char *zAttr;
   const char *zValue;
@@ -782,6 +783,7 @@ void document_render(
   const char *zDefaultTitle,    /* Default title */
   const char *zFilename         /* Name of the file being rendered */
 ){
+  fprintf(stdout, "document_render\n");
   Blob title;
   int isPopup = P("popup")!=0;
   blob_init(&title,0,0);
@@ -923,6 +925,7 @@ void document_render(
 ** to the top-level of the repository.
 */
 void doc_page(void){
+  fprintf(stdout, "doc_page\n");
   const char *zName = 0;            /* Argument to the /doc page */
   const char *zOrigName = "?";      /* Original document name */
   const char *zMime;                /* Document MIME type */

@@ -2852,6 +2852,9 @@ int Th_RenderToBlob(const char *z, Blob * pOut, u32 mFlags){
 
   assert(0==(TH_R2B_MASK & TH_INIT_MASK) && "init/r2b mask conflict");
   Th_FossilInit(mFlags & TH_INIT_MASK);
+  fprintf(stdout, "i %d\n", i);
+  fprintf(stdout, "z %s\n", z);
+  if ((z != NULL) && (z != 0)) {
   while( z[i] ){
     if( 0==(TH_R2B_NO_VARS & mFlags)
         && z[i]=='$' && (n = validVarName(&z[i+1]))>0 ){
@@ -2896,6 +2899,7 @@ int Th_RenderToBlob(const char *z, Blob * pOut, u32 mFlags){
       i++;
     }
   }
+  } // if
   if( rc==TH_ERROR ){
     zResult = (char*)Th_GetResult(g.interp, &n);
     sendError(pOut,zResult, n, 1);
@@ -2903,6 +2907,7 @@ int Th_RenderToBlob(const char *z, Blob * pOut, u32 mFlags){
     sendText(pOut,z, i, 0);
   }
   Th_SetOutputBlob(origOut);
+  fprintf(stdout, "return\n");
   return rc;
 }
 
